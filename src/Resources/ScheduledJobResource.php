@@ -1,0 +1,442 @@
+<?php
+
+namespace CodeTechNL\TaskBridgeFilament\Resources;
+
+use CodeTechNL\TaskBridge\Contracts\GroupedJob;
+use CodeTechNL\TaskBridge\Contracts\LabeledJob;
+use CodeTechNL\TaskBridge\Enums\RunStatus;
+use CodeTechNL\TaskBridge\Facades\TaskBridge;
+use CodeTechNL\TaskBridge\Models\ScheduledJob;
+use CodeTechNL\TaskBridge\Support\CronTranslator;
+use CodeTechNL\TaskBridgeFilament\Actions\DryRunJobAction;
+use CodeTechNL\TaskBridgeFilament\Actions\RunJobAction;
+use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\CreateScheduledJob;
+use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\EditScheduledJob;
+use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\ListScheduledJobs;
+use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\ViewScheduledJob;
+use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\RelationManagers\RunsRelationManager;
+use CodeTechNL\TaskBridgeFilament\TaskBridgePlugin;
+use Filament\Forms;
+use Filament\Forms\Form;
+use Filament\Resources\Resource;
+use Filament\Tables;
+use Filament\Tables\Table;
+use Illuminate\Contracts\Support\Htmlable;
+
+class ScheduledJobResource extends Resource
+{
+    protected static ?string $model = ScheduledJob::class;
+
+    public static function getModel(): string
+    {
+        return config('taskbridge.models.scheduled_job', ScheduledJob::class);
+    }
+
+    // ── Navigation (all values delegated to TaskBridgePlugin) ─────────────────
+
+    public static function getNavigationGroup(): ?string
+    {
+        return TaskBridgePlugin::get()->getNavigationGroup();
+    }
+
+    public static function getNavigationLabel(): string
+    {
+        return TaskBridgePlugin::get()->getNavigationLabel();
+    }
+
+    public static function getNavigationIcon(): string|Htmlable|null
+    {
+        return TaskBridgePlugin::get()->getNavigationIcon();
+    }
+
+    public static function getNavigationSort(): ?int
+    {
+        return TaskBridgePlugin::get()->getNavigationSort();
+    }
+
+    public static function getSlug(): string
+    {
+        return TaskBridgePlugin::get()->getSlug();
+    }
+
+    public static function getModelLabel(): string
+    {
+        return 'Scheduled Job';
+    }
+
+    public static function getPluralModelLabel(): string
+    {
+        return TaskBridgePlugin::get()->getNavigationLabel();
+    }
+
+    // ── Form ──────────────────────────────────────────────────────────────────
+
+    public static function form(Form $form): Form
+    {
+        return $form->schema([
+            Forms\Components\Grid::make(2)->schema([
+                Forms\Components\Section::make('Job class')
+                    ->schema([
+                        // CREATE: searchable grouped dropdown of registered classes
+                        Forms\Components\Select::make('class')
+                            ->label('Job')
+                            ->options(fn () => self::buildClassOptions())
+                            ->allowHtml()
+                            ->searchable()
+                            ->required()
+                            ->visibleOn('create')
+                            ->live()
+                            ->afterStateUpdated(function (Forms\Set $set, ?string $state) {
+                                if (! $state || ! class_exists($state)) {
+                                    return;
+                                }
+                                $instance = new $state;
+                                $set('_identifier_hint', ScheduledJob::identifierFromClass($state));
+                                $set('cron_override', $instance->cronExpression());
+                            })
+                            ->helperText('Select a job class from the list.')
+                            ->rules([
+                                fn () => function (string $attribute, mixed $value, \Closure $fail) {
+                                    if (! $value || ! TaskBridgePlugin::get()->shouldPreventDuplicates()) {
+                                        return;
+                                    }
+                                    if (ScheduledJob::where('class', $value)->exists()) {
+                                        $fail('This job is already registered. Edit the existing record instead.');
+                                    }
+                                },
+                            ]),
+
+                        // EDIT: read-only display of the class
+                        Forms\Components\TextInput::make('class')
+                            ->label('Job class')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->visibleOn('edit'),
+
+                        Forms\Components\TextInput::make('_identifier_hint')
+                            ->label('Identifier')
+                            ->disabled()
+                            ->dehydrated(false)
+                            ->placeholder('Auto-derived from class name')
+                            ->visibleOn('create'),
+
+                        Forms\Components\Select::make('queue_connection')
+                            ->label('Queue connection')
+                            ->options(fn () => self::buildQueueConnectionOptions())
+                            ->required()
+                            ->helperText('The SQS queue connection this job will be dispatched to.'),
+
+                        Forms\Components\TextInput::make('cron_override')
+                            ->label('Cron expression')
+                            ->placeholder(fn (?ScheduledJob $record) => $record?->cron_expression ?? 'e.g. 0 3 * * ? *')
+                            ->required()
+                            ->columnSpanFull()
+                            ->helperText('5-part standard (minute hour dom month dow) or 6-part AWS format (minute hour dom month dow year). '
+                                .'In 6-part format, one of dom or dow must be "?".')
+                            ->rules([
+                                fn () => function (string $attribute, mixed $value, \Closure $fail) {
+                                    if ($value && ! CronTranslator::isValid($value)) {
+                                        $fail('Invalid cron expression. Use standard 5-part format: minute hour day-of-month month day-of-week.');
+                                    }
+                                },
+                            ]),
+
+                        Forms\Components\Toggle::make('enabled')
+                            ->label('Enabled')
+                            ->default(true)
+                            ->columnSpanFull()
+                            ->helperText('Disabled jobs are removed from the external scheduler but kept in the database.'),
+                    ])
+                    ->columns(2),
+
+                Forms\Components\Section::make('Retry Policy')
+                    ->description('Leave blank to use the config defaults.')
+                    ->schema([
+                        Forms\Components\TextInput::make('retry_maximum_event_age_seconds')
+                            ->label('Max event age (seconds)')
+                            ->numeric()
+                            ->minValue(60)
+                            ->maxValue(86400)
+                            ->default(86400)
+                            ->placeholder('86400')
+                            ->helperText('How long EventBridge retains an undelivered event. Range: 60–86 400 (24 h).')
+                            ->rules([
+                                fn () => function (string $attribute, mixed $value, \Closure $fail) {
+                                    if ($value !== null && ($value < 60 || $value > 86400)) {
+                                        $fail('Max event age must be between 60 and 86 400 seconds.');
+                                    }
+                                },
+                            ]),
+
+                        Forms\Components\TextInput::make('retry_maximum_retry_attempts')
+                            ->label('Max retry attempts')
+                            ->numeric()
+                            ->minValue(0)
+                            ->maxValue(185)
+                            ->default(185)
+                            ->placeholder('185')
+                            ->helperText('Number of retries on a failed invocation. Range: 0–185.')
+                            ->rules([
+                                fn () => function (string $attribute, mixed $value, \Closure $fail) {
+                                    if ($value !== null && ($value < 0 || $value > 185)) {
+                                        $fail('Max retry attempts must be between 0 and 185.');
+                                    }
+                                },
+                            ]),
+                    ])
+                    ->columns(2)
+                    ->collapsed(),
+            ]),
+        ]);
+    }
+
+    // ── Table ─────────────────────────────────────────────────────────────────
+
+    public static function table(Table $table): Table
+    {
+        return $table
+            ->columns([
+                Tables\Columns\ColorColumn::make('_status_dot')
+                    ->label('')
+                    ->getStateUsing(fn (ScheduledJob $record) => $record->last_status?->color() ?? 'gray')
+                    ->width('4px'),
+
+                Tables\Columns\TextColumn::make('class')
+                    ->label('Job')
+                    ->formatStateUsing(fn (string $state) => self::resolveLabel($state))
+                    ->description(fn (ScheduledJob $record) => $record->group)
+                    ->searchable()
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('effective_cron')
+                    ->label('Cron')
+                    ->tooltip(fn (ScheduledJob $record) => CronTranslator::describe($record->effective_cron))
+                    ->badge()
+                    ->color('gray'),
+
+                Tables\Columns\ToggleColumn::make('enabled')
+                    ->label('Enabled')
+                    ->afterStateUpdated(function (ScheduledJob $record) {
+                        $record->enabled
+                            ? TaskBridge::enable($record->class)
+                            : TaskBridge::disable($record->class);
+                    }),
+
+                Tables\Columns\TextColumn::make('last_run_at')
+                    ->label('Last Run')
+                    ->since()
+                    ->placeholder('never')
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('last_status')
+                    ->label('Status')
+                    ->badge()
+                    ->placeholder('—')
+                    ->color(fn (?RunStatus $state) => $state?->color() ?? 'gray')
+                    ->formatStateUsing(fn (?RunStatus $state) => $state?->label() ?? '—'),
+
+                Tables\Columns\TextColumn::make('next_run')
+                    ->label('Next Run')
+                    ->getStateUsing(function (ScheduledJob $record) {
+                        try {
+                            return CronTranslator::nextRunAt($record->effective_cron)->format('Y-m-d H:i');
+                        } catch (\Throwable) {
+                            return '—';
+                        }
+                    }),
+            ])
+            ->filters([
+                Tables\Filters\SelectFilter::make('group')
+                    ->options(fn () => ScheduledJob::whereNotNull('group')->distinct()->pluck('group', 'group')),
+
+                Tables\Filters\SelectFilter::make('enabled')
+                    ->options(['1' => 'Enabled', '0' => 'Disabled']),
+
+                Tables\Filters\SelectFilter::make('last_status')
+                    ->label('Last Status')
+                    ->options(
+                        collect(RunStatus::cases())
+                            ->mapWithKeys(fn (RunStatus $case) => [$case->value => $case->label()])
+                            ->toArray()
+                    ),
+            ])
+            ->actions(self::buildRowActions())
+            ->paginationPageOptions(TaskBridgePlugin::get()->getPaginationPageOptions())
+            ->defaultPaginationPageOption(TaskBridgePlugin::get()->getDefaultPaginationPageOption())
+            ->bulkActions([
+                Tables\Actions\BulkActionGroup::make([
+                    Tables\Actions\BulkAction::make('enable')
+                        ->label('Enable selected')
+                        ->icon('heroicon-o-check-circle')
+                        ->action(fn ($records) => $records->each(
+                            fn (ScheduledJob $job) => TaskBridge::enable($job->class)
+                        )),
+                    Tables\Actions\BulkAction::make('disable')
+                        ->label('Disable selected')
+                        ->icon('heroicon-o-x-circle')
+                        ->color('danger')
+                        ->action(fn ($records) => $records->each(
+                            fn (ScheduledJob $job) => TaskBridge::disable($job->class)
+                        )),
+                    Tables\Actions\DeleteBulkAction::make()
+                        ->after(function ($records) {
+                            foreach ($records as $record) {
+                                try {
+                                    TaskBridge::getEventBridge()->remove($record->identifier);
+                                } catch (\Throwable) {
+                                }
+                            }
+                        }),
+                ]),
+            ]);
+    }
+
+    public static function getRelations(): array
+    {
+        return [RunsRelationManager::class];
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => ListScheduledJobs::route('/'),
+            'create' => CreateScheduledJob::route('/create'),
+            'edit' => EditScheduledJob::route('/{record}/edit'),
+            'view' => ViewScheduledJob::route('/{record}'),
+        ];
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Build grouped, alphabetically sorted options for the class Select.
+     *
+     * Groups come from GroupedJob::group(); default group is 'Other'.
+     * Labels come from LabeledJob::taskLabel(); fallback is class_basename().
+     *
+     * When preventDuplicates is enabled, already-registered classes are
+     * included but rendered with a greyed-out HTML label so the user can
+     * see what is taken. Sorting is applied on the raw label before any
+     * HTML is injected, ensuring alphabetical order is preserved.
+     */
+    public static function buildClassOptions(): array
+    {
+        $preventDuplicates = TaskBridgePlugin::get()->shouldPreventDuplicates();
+        $registered = app(\CodeTechNL\TaskBridge\TaskBridge::class)->getRegisteredClasses();
+        $existing = ScheduledJob::pluck('class')->flip();
+
+        // ── 1. Collect raw data (no HTML yet) ────────────────────────────────
+        // Structure: [group => [class => ['label' => string, 'taken' => bool]]]
+        $raw = [];
+
+        foreach ($registered as $class) {
+            if (! class_exists($class)) {
+                continue;
+            }
+
+            $isTaken = isset($existing[$class]);
+
+            // When preventDuplicates is off, skip the taken check entirely
+            // so taken classes appear as fully selectable options.
+            // When preventDuplicates is on, include them so they're visible
+            // but will be rendered disabled.
+            $instance = new $class;
+            $label = ($instance instanceof LabeledJob)
+                ? $instance->taskLabel()
+                : class_basename($class);
+            $group = ($instance instanceof GroupedJob)
+                ? $instance->group()
+                : 'Other';
+
+            $raw[$group][$class] = ['label' => $label, 'taken' => $isTaken];
+        }
+
+        // ── 2. Sort groups alphabetically, entries within each group by label ─
+        ksort($raw);
+        foreach ($raw as &$entries) {
+            uasort($entries, fn (array $a, array $b) => strcmp($a['label'], $b['label']));
+        }
+        unset($entries);
+
+        // ── 3. Render final options (apply HTML for disabled state if needed) ─
+        $grouped = [];
+
+        foreach ($raw as $group => $entries) {
+            foreach ($entries as $class => $data) {
+                if ($data['taken'] && $preventDuplicates) {
+                    // Visually disabled: greyed-out text + badge
+                    $grouped[$group][$class] = sprintf(
+                        '<span class="opacity-40 cursor-not-allowed">%s <span class="text-xs font-medium">(registered)</span></span>',
+                        e($data['label'])
+                    );
+                } else {
+                    $grouped[$group][$class] = $data['label'];
+                }
+            }
+        }
+
+        return $grouped;
+    }
+
+    /**
+     * Build the table row actions, either inline or collapsed into a dropdown,
+     * depending on the TaskBridgePlugin::groupActions() setting.
+     */
+    public static function buildRowActions(): array
+    {
+        $actions = [
+            RunJobAction::make(),
+            DryRunJobAction::make(),
+            Tables\Actions\EditAction::make(),
+            Tables\Actions\DeleteAction::make()
+                ->after(function (ScheduledJob $record) {
+                    try {
+                        TaskBridge::getEventBridge()->remove($record->identifier);
+                    } catch (\Throwable) {
+                    }
+                }),
+            Tables\Actions\ViewAction::make(),
+        ];
+
+        if (TaskBridgePlugin::get()->shouldGroupActions()) {
+            return [Tables\Actions\ActionGroup::make($actions)];
+        }
+
+        return $actions;
+    }
+
+    /**
+     * Build options for the queue connection dropdown.
+     * Only includes connections that use the SQS driver.
+     */
+    public static function buildQueueConnectionOptions(): array
+    {
+        $connections = config('queue.connections', []);
+        $options = [];
+
+        foreach ($connections as $name => $config) {
+            if (($config['driver'] ?? '') === 'sqs') {
+                $options[$name] = $name;
+            }
+        }
+
+        return $options;
+    }
+
+    /**
+     * Resolve a human-readable label for a class name.
+     * Used in the table Job column.
+     */
+    public static function resolveLabel(string $class): string
+    {
+        if (! class_exists($class)) {
+            return class_basename($class).' ⚠';
+        }
+
+        $instance = new $class;
+
+        return ($instance instanceof LabeledJob)
+            ? $instance->taskLabel()
+            : class_basename($class);
+    }
+}
