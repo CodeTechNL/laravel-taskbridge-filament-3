@@ -36,6 +36,10 @@ class ViewScheduledJob extends ViewRecord
             ->schema([
                 Section::make('Job Details')
                     ->schema([
+                        TextEntry::make('description')
+                            ->label('Description')
+                            ->placeholder('—')
+                            ->columnSpanFull(),
                         Grid::make(3)->schema([
                             TextEntry::make('class')->label('Class')->columnSpan(2),
                             TextEntry::make('identifier')->label('Identifier'),

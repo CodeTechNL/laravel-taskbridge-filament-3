@@ -2,12 +2,11 @@
 
 namespace CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages;
 
-use CodeTechNL\TaskBridge\Contracts\GroupedJob;
-use CodeTechNL\TaskBridge\Contracts\ScheduledJob as ScheduledJobContract;
 use CodeTechNL\TaskBridge\Facades\TaskBridge;
 use CodeTechNL\TaskBridge\Models\ScheduledJob;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource;
 use Filament\Resources\Pages\CreateRecord;
+use Illuminate\Contracts\Queue\ShouldQueue;
 
 class CreateScheduledJob extends CreateRecord
 {
@@ -22,11 +21,19 @@ class CreateScheduledJob extends CreateRecord
     {
         $class = $data['class'];
 
-        if (class_exists($class) && is_a($class, ScheduledJobContract::class, true)) {
+        if (class_exists($class) && is_a($class, ShouldQueue::class, true)) {
             $instance = new $class;
             $data['identifier'] = ScheduledJob::identifierFromClass($class);
-            $data['cron_expression'] = $instance->cronExpression();
-            $data['group'] = ($instance instanceof GroupedJob) ? $instance->group() : null;
+
+            // Store the class default separately from the user-provided override.
+            // cronExpression() is optional — DB column is nullable.
+            $data['cron_expression'] = method_exists($instance, 'cronExpression')
+                ? $instance->cronExpression()
+                : null;
+
+            // Prefer the group already set via the form (auto-detected or user-typed).
+            // Fall back to resolveGroup() so the DB is always populated correctly.
+            $data['group'] = $data['group'] ?? ScheduledJobResource::resolveGroup($class);
         }
 
         // Strip internal hint fields — they are dehydrated(false) but guard anyway

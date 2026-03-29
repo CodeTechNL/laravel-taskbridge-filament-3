@@ -1,156 +1,69 @@
 # AGENTS.md — taskbridge-filament-3
 
-This file guides AI agents working in this package.
+For full context on this package, read @README.md. For the core package rules, read @../laravel-taskbridge/AGENTS.md.
 
-## Package identity
+## Commands
 
-- **Composer name:** `codetechnl/laravel-taskbridge-filament-3`
-- **Root namespace:** `CodeTechNL\TaskBridgeFilament\`
-- **PHP:** ^8.3 | **Filament:** ^3.2
-- **Depends on:** `codetechnl/laravel-taskbridge`
-
-## Code style — mandatory rule
-
-**After every code change, run Laravel Pint before finishing:**
+Run after every code change — must pass before finishing:
 
 ```bash
-./vendor/bin/pint
+./vendor/bin/pint   # code style (default ruleset)
 ```
 
-Never skip this step. The project uses the default Pint ruleset. If Pint is not installed in this package's vendor, run `composer install` first.
+If `vendor/` is missing, run `composer install` first.
 
-## Source layout
+## Git
 
-```
-src/
-  Actions/
-    DryRunJobAction.php       — table row action: dry-run via TaskBridge::run(dryRun: true)
-    RunJobAction.php          — table row action: force-run via TaskBridge::run(force: true)
-    SyncAction.php            — header action: sync all enabled jobs to EventBridge
-    ValidateJobsAction.php    — header action: check class existence + contract compliance
-  Resources/
-    ScheduledJobResource.php                   — main CRUD resource
-    ScheduledJobRunResource.php                — read-only run log resource
-    ScheduledJobResource/
-      Pages/
-        CreateScheduledJob.php
-        EditScheduledJob.php
-        ListScheduledJobs.php
-        ViewScheduledJob.php
-      RelationManagers/
-        RunsRelationManager.php               — inline run history on view page
-  Widgets/
-    TaskBridgeWidget.php                      — stats overview (total/active/disabled/failed 24h)
-  TaskBridgeFilamentServiceProvider.php
-  TaskBridgePlugin.php                        — fluent plugin configuration
-resources/
-  views/
-    modals/
-      output-detail.blade.php               — status badge + message + metadata table
-```
+**Never create commits unless explicitly requested by the user.**
 
-## Critical architectural rules
+## Rules
 
-### 1. Plugin singleton pattern
+**Interface names are final.** The four optional interfaces from the core package are: `RunsConditionally`, `HasGroup`, `HasCustomLabel`, `ReportsTaskOutput`. Do not use or reference the old names (`ConditionalJob`, `GroupedJob`, `LabeledJob`, `ReportsOutput`). Do not reference `ScheduledJob` — it no longer exists.
 
-`TaskBridgePlugin::get()` is the canonical way to read plugin configuration from resource static methods. During a real Filament request, `filament()->getPlugin('taskbridge')` returns the booted instance. During tests or artisan commands, it falls back to `new static` (default values). Never inject the plugin via constructor — always call `TaskBridgePlugin::get()`.
-
-### 2. Enum-typed closures in columns
-
-`RunStatus` and `TriggeredBy` are backed PHP enums cast by Eloquent. Filament column closures receive the cast value — always type-hint with the enum, never `string`:
-
+**Always use enum cases in column closures.** `RunStatus` and `TriggeredBy` are Eloquent-cast enums. Filament passes the cast value, not a string:
 ```php
-// Correct
+// correct
 ->color(fn (RunStatus $state) => $state->color())
-->formatStateUsing(fn (RunStatus $state) => $state->label())
-
-// Wrong — will throw TypeError at runtime
+// wrong — throws TypeError at runtime
 ->color(fn (string $state) => ...)
 ```
 
-### 3. Output column uses JobOutput::fromArray
+**Never interpolate enum instances as strings.** Always call `->label()`:
+```php
+// correct
+'Status: ' . $run->status->label()
+// wrong — throws: Object of class RunStatus could not be converted to string
+"Status: {$run->status}"
+```
 
-The `output` column on `ScheduledJobRun` stores a JSON array. Filament reads it as a PHP array. Always reconstruct via `JobOutput::fromArray($state)`:
-
+**Output column always uses `JobOutput::fromArray()`.** The `output` column is a PHP array (Eloquent JSON cast). Never access keys directly in column definitions:
 ```php
 ->formatStateUsing(fn (?array $state) => $state ? JobOutput::fromArray($state)->label() : null)
-->color(fn (?array $state) => $state ? JobOutput::fromArray($state)->color() : 'gray')
 ```
 
-### 4. getModel() override on resources
+**`resolveLabel()` and `resolveGroup()` are the single source of truth.** Both label and group fallback logic lives in `ScheduledJobResource::resolveLabel()` and `resolveGroup()`. Use these helpers everywhere — do not inline the detection logic.
 
-Both resources override `getModel()` to respect the config override:
+**`TaskBridgePlugin::get()` is the only way to read plugin config.** Never inject the plugin via constructor or instantiate it with `new`. During tests it falls back to defaults automatically.
 
+**Always resolve model classes via config:**
 ```php
-public static function getModel(): string
-{
-    return config('taskbridge.models.scheduled_job', ScheduledJob::class);
-}
+config('taskbridge.models.scheduled_job', ScheduledJob::class)
 ```
 
-This means custom model classes defined in `taskbridge.models` are automatically used. Do not hardcode model class names inside resource methods.
-
-### 5. Actions call TaskBridge facade
-
-Row actions (`RunJobAction`, `DryRunJobAction`) call `TaskBridge::run()` via the facade. The `$record` passed to the action closure is always a `ScheduledJob` model instance. Never dispatch the job class directly.
-
+**Row actions call `TaskBridge::run()`, never `dispatch()` directly:**
 ```php
-// Correct
+// correct
 $run = TaskBridge::run($record->class, force: true);
-
-// Wrong
+// wrong
 dispatch(new ($record->class));
 ```
 
-### 6. Status interpolation is forbidden
+**The driver method is `getEventBridge()`, not `getDriver()`.**
 
-`RunStatus` enum instances cannot be used in PHP string interpolation. Always call `->label()`:
+**No `BadgeColumn`.** Filament 3 uses `TextColumn->badge()` only.
 
-```php
-// Correct
-'Job dispatched: ' . $run->status->label()
+## Further reading
 
-// Wrong — throws: Object of class RunStatus could not be converted to string
-"Job dispatched: {$run->status}"
-```
-
-### 7. Page actions call getEventBridge(), not getDriver()
-
-The stale `getDriver()` method was removed. All pages that reference the EventBridge driver must call:
-
-```php
-\CodeTechNL\TaskBridge\Facades\TaskBridge::getEventBridge()
-```
-
-### 8. No BadgeColumn
-
-Filament 3 does not have `BadgeColumn`. Use `TextColumn->badge()` instead. This was a migration from Filament 2 — do not reintroduce `BadgeColumn`.
-
-### 9. output-detail modal receives the raw array
-
-The modal view `taskbridge-filament::modals.output-detail` receives `['output' => $record->output]` where `$record->output` is a PHP array (Eloquent casts the JSON column). The view reads `$output['status']`, `$output['message']`, `$output['metadata']` directly.
-
-## Key configuration options
-
-All read via `TaskBridgePlugin::get()`:
-
-| Method | Default | Description |
-|--------|---------|-------------|
-| `getNavigationGroup()` | `'System'` | Sidebar group |
-| `getSlug()` | `'scheduled-jobs'` | URL prefix |
-| `getNavigationSort()` | `99` | Sidebar order |
-| `shouldPreventDuplicates()` | `true` | Block same class being added twice |
-| `shouldGroupActions()` | `false` | Collapse row actions into dropdown |
-| `getPaginationPageOptions()` | `[25, 50, 100]` | Page size options |
-| `shouldRegisterRunLog()` | `true` | Register run log resource |
-| `getRunLogSlug()` | `'scheduled-job-runs'` | Run log URL prefix |
-
-## Common mistakes to avoid
-
-- Using `BadgeColumn` — use `TextColumn->badge()`
-- String interpolation of `RunStatus`/`TriggeredBy` enum instances — call `->label()`
-- Type-hinting `?string` in column closures for enum-cast fields — use the enum type
-- Calling `TaskBridge::getDriver()` — the method is `getEventBridge()`
-- Hardcoding model classes instead of `config('taskbridge.models.*')`
-- Accessing `$record->error` — that column was removed; errors are in `$record->output['message']`
-- Building the plugin with `new TaskBridgePlugin` directly — always use `TaskBridgePlugin::make()`
+- @README.md — plugin configuration and all available options
+- @../laravel-taskbridge/docs/architecture.md — model schemas, enum values, contracts, execution paths
+- @../laravel-taskbridge/AGENTS.md — core package rules that also apply here

@@ -1,6 +1,6 @@
 # taskbridge-filament-3
 
-Filament v3 admin panel integration for [laravel-taskbridge](../laravel-taskbridge/README.md). Provides a complete UI for managing scheduled jobs, viewing run history, and triggering manual executions — all without touching AWS.
+Filament v3 admin panel integration for [laravel-taskbridge](../laravel-taskbridge/README.md). Provides a complete UI for managing scheduled jobs, viewing run history, and triggering manual executions — all without touching AWS directly.
 
 ## Requirements
 
@@ -39,7 +39,7 @@ That's it. The plugin automatically registers the **Scheduled Jobs** resource, t
 
 A full CRUD interface for your registered jobs:
 
-- **Create** — select a job class from your registered jobs, configure queue connection, cron expression, retry policy, and enable/disable
+- **Create** — select a job class from your registered jobs, configure queue connection, cron expression, retry policy, description, and enable/disable
 - **Edit** — update any settings; saved changes auto-sync to EventBridge
 - **View** — detailed job info with inline run history
 - **Filters** — filter by group, enabled state, last status
@@ -60,7 +60,7 @@ A full CRUD interface for your registered jobs:
 | Action | Description |
 |--------|-------------|
 | Sync | Push all enabled jobs to AWS EventBridge Scheduler |
-| Validate | Check that all registered job classes exist and implement the correct interface |
+| Validate | Check that all registered job classes exist and can be loaded |
 
 ### Run Logs resource
 
@@ -138,15 +138,52 @@ TaskBridgePlugin::make()
 
 The policy is applied to `ScheduledJobResource`. Standard Filament policy methods apply: `viewAny`, `create`, `update`, `delete`, etc.
 
+## Creating a job in the UI
+
+When you select a job class in the Create form, TaskBridge automatically pre-fills:
+
+- **Identifier** — derived from the class name + name prefix
+- **Cron expression** — from `cronExpression()` if the method exists on the class
+- **Group** — from `HasGroup::group()` if implemented, otherwise from the folder name
+
+All of these can be edited before saving. The cron field is required only when the job class does not define a default.
+
+## Labels and groups
+
+Without any interface, TaskBridge derives readable values automatically:
+
+- **Label**: `SendDailyReport` → `"Send daily report"`
+- **Group**: `App\Jobs\Reporting\SendDailyReport` → `"Reporting"` (from folder)
+
+Override either by implementing the corresponding interface:
+
+```php
+use CodeTechNL\TaskBridge\Contracts\HasCustomLabel;
+use CodeTechNL\TaskBridge\Contracts\HasGroup;
+
+class SendDailyReport implements HasCustomLabel, HasGroup, ShouldQueue
+{
+    public function taskLabel(): string
+    {
+        return 'Daily Report — Finance';
+    }
+
+    public function group(): string
+    {
+        return 'Finance'; // Overrides the folder-based detection.
+    }
+}
+```
+
 ## Viewing structured job output
 
-When a job implements `ReportsOutput` and uses the `HasJobOutput` trait, execution metadata is stored on the run record. In the Run Logs table, the **Output** action opens a modal showing:
+When a job implements `ReportsTaskOutput` and uses the `HasJobOutput` trait, execution metadata is stored on the run record. In the Run Logs table, the **Output** action opens a modal showing:
 
 - Status badge (Success / Error / Warning / Info)
 - Message text
 - Key/value metadata table
 
-Example job output shown in the modal:
+Example:
 
 ```
 Status:  Success
@@ -155,38 +192,6 @@ Message: Import complete
 processed  | 1 420
 skipped    | 38
 duration   | 2.1s
-```
-
-## Customising the job label
-
-By default, the UI shows the class basename (e.g. `SendDailyReport`). Implement `LabeledJob` to show a human-readable name:
-
-```php
-use CodeTechNL\TaskBridge\Contracts\LabeledJob;
-
-class SendDailyReport implements ScheduledJob, LabeledJob, ShouldQueue
-{
-    public function taskLabel(): string
-    {
-        return 'Send Daily Report';
-    }
-}
-```
-
-## Grouping jobs
-
-Implement `GroupedJob` to categorise jobs in the Create dropdown and filter:
-
-```php
-use CodeTechNL\TaskBridge\Contracts\GroupedJob;
-
-class SendDailyReport implements ScheduledJob, GroupedJob, ShouldQueue
-{
-    public function group(): string
-    {
-        return 'Reporting';
-    }
-}
 ```
 
 ## Run Logs in the job view

@@ -2,8 +2,8 @@
 
 namespace CodeTechNL\TaskBridgeFilament\Resources;
 
-use CodeTechNL\TaskBridge\Contracts\GroupedJob;
-use CodeTechNL\TaskBridge\Contracts\LabeledJob;
+use CodeTechNL\TaskBridge\Contracts\HasCustomLabel;
+use CodeTechNL\TaskBridge\Contracts\HasGroup;
 use CodeTechNL\TaskBridge\Enums\RunStatus;
 use CodeTechNL\TaskBridge\Facades\TaskBridge;
 use CodeTechNL\TaskBridge\Models\ScheduledJob;
@@ -22,6 +22,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Contracts\Support\Htmlable;
+use Illuminate\Support\Str;
 
 class ScheduledJobResource extends Resource
 {
@@ -90,9 +91,22 @@ class ScheduledJobResource extends Resource
                                 if (! $state || ! class_exists($state)) {
                                     return;
                                 }
-                                $instance = new $state;
+
                                 $set('_identifier_hint', ScheduledJob::identifierFromClass($state));
-                                $set('cron_override', $instance->cronExpression());
+
+                                $instance = new $state;
+
+                                $cron = method_exists($instance, 'cronExpression')
+                                    ? $instance->cronExpression()
+                                    : null;
+                                if ($cron !== null) {
+                                    $set('cron_override', $cron);
+                                }
+
+                                $group = self::resolveGroup($state);
+                                if ($group !== null) {
+                                    $set('group', $group);
+                                }
                             })
                             ->helperText('Select a job class from the list.')
                             ->rules([
@@ -120,6 +134,13 @@ class ScheduledJobResource extends Resource
                             ->placeholder('Auto-derived from class name')
                             ->visibleOn('create'),
 
+                        Forms\Components\TextInput::make('group')
+                            ->label('Group')
+                            ->placeholder('Auto-derived from folder structure')
+                            ->maxLength(255)
+                            ->nullable()
+                            ->helperText('Organises jobs in the UI. Auto-detected from the job\'s folder; override freely.'),
+
                         Forms\Components\Select::make('queue_connection')
                             ->label('Queue connection')
                             ->options(fn () => self::buildQueueConnectionOptions())
@@ -128,18 +149,42 @@ class ScheduledJobResource extends Resource
 
                         Forms\Components\TextInput::make('cron_override')
                             ->label('Cron expression')
-                            ->placeholder(fn (?ScheduledJob $record) => $record?->cron_expression ?? 'e.g. 0 3 * * ? *')
-                            ->required()
+                            ->placeholder(fn (?ScheduledJob $record) => $record?->cron_expression ?? 'e.g. 0 3 * * *')
                             ->columnSpanFull()
-                            ->helperText('5-part standard (minute hour dom month dow) or 6-part AWS format (minute hour dom month dow year). '
-                                .'In 6-part format, one of dom or dow must be "?".')
+                            ->helperText('Defines when this job runs. Overrides any default set in cronExpression(). '
+                                .'Accepts 5-part standard cron (minute hour dom month dow) or 6-part AWS format adding year at the end.')
                             ->rules([
-                                fn () => function (string $attribute, mixed $value, \Closure $fail) {
-                                    if ($value && ! CronTranslator::isValid($value)) {
-                                        $fail('Invalid cron expression. Use standard 5-part format: minute hour day-of-month month day-of-week.');
+                                fn (Forms\Get $get) => function (string $attribute, mixed $value, \Closure $fail) use ($get) {
+                                    if ($value) {
+                                        if (! CronTranslator::isValid($value)) {
+                                            $fail('Invalid cron expression. Use standard 5-part format: minute hour day-of-month month day-of-week.');
+                                        }
+
+                                        return;
+                                    }
+
+                                    // No value supplied — only an error when the class also has no default.
+                                    $class = $get('class');
+                                    if (! $class || ! class_exists($class)) {
+                                        return;
+                                    }
+
+                                    $instance = new $class;
+                                    $hasCron = method_exists($instance, 'cronExpression')
+                                        && $instance->cronExpression() !== null;
+
+                                    if (! $hasCron) {
+                                        $fail('A cron expression is required because the job class does not define one.');
                                     }
                                 },
                             ]),
+
+                        Forms\Components\Textarea::make('description')
+                            ->label('Description / Notes')
+                            ->placeholder('Optional notes about what this job does, when it runs, or who owns it.')
+                            ->rows(2)
+                            ->columnSpanFull()
+                            ->nullable(),
 
                         Forms\Components\Toggle::make('enabled')
                             ->label('Enabled')
@@ -340,13 +385,8 @@ class ScheduledJobResource extends Resource
             // so taken classes appear as fully selectable options.
             // When preventDuplicates is on, include them so they're visible
             // but will be rendered disabled.
-            $instance = new $class;
-            $label = ($instance instanceof LabeledJob)
-                ? $instance->taskLabel()
-                : class_basename($class);
-            $group = ($instance instanceof GroupedJob)
-                ? $instance->group()
-                : 'Other';
+            $label = self::resolveLabel($class);
+            $group = self::resolveGroup($class) ?? 'Other';
 
             $raw[$group][$class] = ['label' => $label, 'taken' => $isTaken];
         }
@@ -425,7 +465,9 @@ class ScheduledJobResource extends Resource
 
     /**
      * Resolve a human-readable label for a class name.
-     * Used in the table Job column.
+     *
+     * Priority: LabeledJob::taskLabel() → readable sentence-case from class basename.
+     * E.g. MyClassIsThis → "My class is this"
      */
     public static function resolveLabel(string $class): string
     {
@@ -435,8 +477,48 @@ class ScheduledJobResource extends Resource
 
         $instance = new $class;
 
-        return ($instance instanceof LabeledJob)
-            ? $instance->taskLabel()
-            : class_basename($class);
+        if ($instance instanceof HasCustomLabel) {
+            return $instance->taskLabel();
+        }
+
+        return ucfirst(mb_strtolower(Str::headline(class_basename($class))));
+    }
+
+    /**
+     * Resolve a group for a class name.
+     *
+     * Priority: GroupedJob::group() → namespace segment before the class name.
+     * Returns null when the class lives directly under a root segment (Jobs, etc.).
+     *
+     * E.g. App\Jobs\Reporting\SendReport → "Reporting"
+     *      App\Jobs\SendReport            → null
+     */
+    public static function resolveGroup(string $class): ?string
+    {
+        if (! class_exists($class)) {
+            return null;
+        }
+
+        $instance = new $class;
+
+        if ($instance instanceof HasGroup) {
+            return $instance->group();
+        }
+
+        $parts = explode('\\', $class);
+
+        if (count($parts) < 3) {
+            return null;
+        }
+
+        $parentSegment = $parts[count($parts) - 2];
+
+        $rootSegments = ['Jobs', 'Commands', 'Console', 'App', 'Http', 'Listeners', 'Events'];
+
+        if (in_array($parentSegment, $rootSegments, strict: true)) {
+            return null;
+        }
+
+        return Str::headline($parentSegment);
     }
 }
