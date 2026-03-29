@@ -2,10 +2,9 @@
 
 namespace CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\RelationManagers;
 
-use CodeTechNL\TaskBridge\Data\JobOutput;
 use CodeTechNL\TaskBridge\Enums\RunStatus;
 use CodeTechNL\TaskBridge\Enums\TriggeredBy;
-use CodeTechNL\TaskBridge\Models\ScheduledJobRun;
+use CodeTechNL\TaskBridgeFilament\Actions\ViewOutputAction;
 use Filament\Resources\RelationManagers\RelationManager;
 use Filament\Tables;
 use Filament\Tables\Table;
@@ -20,7 +19,7 @@ class RunsRelationManager extends RelationManager
     {
         return $table
             ->recordTitleAttribute('id')
-            ->defaultSort('started_at', 'desc')
+            ->defaultSort('created_at', 'desc')
             ->columns([
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
@@ -32,6 +31,13 @@ class RunsRelationManager extends RelationManager
                     ->badge()
                     ->color(fn (TriggeredBy $state) => $state->color())
                     ->formatStateUsing(fn (TriggeredBy $state) => $state->label()),
+
+                Tables\Columns\TextColumn::make('scheduled_for')
+                    ->label('Scheduled For')
+                    ->dateTime()
+                    ->placeholder('—')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('started_at')
                     ->label('Started')
@@ -53,13 +59,6 @@ class RunsRelationManager extends RelationManager
 
                 Tables\Columns\TextColumn::make('jobs_dispatched')
                     ->label('Jobs Dispatched'),
-
-                Tables\Columns\TextColumn::make('output')
-                    ->label('Output')
-                    ->badge()
-                    ->formatStateUsing(fn (?array $state) => $state ? JobOutput::fromArray($state)->label() : null)
-                    ->color(fn (?array $state) => $state ? JobOutput::fromArray($state)->color() : 'gray')
-                    ->placeholder('—'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('status')
@@ -78,16 +77,7 @@ class RunsRelationManager extends RelationManager
                     ),
             ])
             ->actions([
-                Tables\Actions\Action::make('view_output')
-                    ->label('Output')
-                    ->icon('heroicon-o-document-text')
-                    ->visible(fn (ScheduledJobRun $record) => ! empty($record->output))
-                    ->modalHeading('Job Output')
-                    ->modalContent(fn (ScheduledJobRun $record) => view(
-                        'taskbridge-filament::modals.output-detail',
-                        ['output' => $record->output]
-                    )),
-
+                ViewOutputAction::make(),
             ]);
     }
 }

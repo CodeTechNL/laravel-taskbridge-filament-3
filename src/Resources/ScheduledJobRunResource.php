@@ -2,11 +2,11 @@
 
 namespace CodeTechNL\TaskBridgeFilament\Resources;
 
-use CodeTechNL\TaskBridge\Data\JobOutput;
 use CodeTechNL\TaskBridge\Enums\RunStatus;
 use CodeTechNL\TaskBridge\Enums\TriggeredBy;
 use CodeTechNL\TaskBridge\Models\ScheduledJob;
 use CodeTechNL\TaskBridge\Models\ScheduledJobRun;
+use CodeTechNL\TaskBridgeFilament\Actions\ViewOutputAction;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobRunResource\Pages\ListScheduledJobRuns;
 use CodeTechNL\TaskBridgeFilament\TaskBridgePlugin;
 use Filament\Forms\Form;
@@ -119,13 +119,6 @@ class ScheduledJobRunResource extends Resource
 
                 Tables\Columns\TextColumn::make('jobs_dispatched')
                     ->label('Jobs Dispatched'),
-
-                Tables\Columns\TextColumn::make('output')
-                    ->label('Output')
-                    ->badge()
-                    ->formatStateUsing(fn (?array $state) => $state ? JobOutput::fromArray($state)->label() : null)
-                    ->color(fn (?array $state) => $state ? JobOutput::fromArray($state)->color() : 'gray')
-                    ->placeholder('—'),
             ])
             ->filters([
                 Tables\Filters\SelectFilter::make('scheduled_job_id')
@@ -165,16 +158,7 @@ class ScheduledJobRunResource extends Resource
                     ),
             ])
             ->actions([
-                Tables\Actions\Action::make('view_output')
-                    ->label('Output')
-                    ->icon('heroicon-o-document-text')
-                    ->visible(fn (ScheduledJobRun $record) => ! empty($record->output))
-                    ->modalHeading('Job Output')
-                    ->modalContent(fn (ScheduledJobRun $record) => view(
-                        'taskbridge-filament::modals.output-detail',
-                        ['output' => $record->output]
-                    )),
-
+                ViewOutputAction::make(),
             ])
             ->paginationPageOptions(TaskBridgePlugin::get()->getRunLogPaginationPageOptions())
             ->defaultPaginationPageOption(TaskBridgePlugin::get()->getRunLogDefaultPaginationPageOption())

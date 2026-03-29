@@ -2,6 +2,7 @@
 
 namespace CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages;
 
+use CodeTechNL\TaskBridgeFilament\Actions\ScheduleJobOnceAction;
 use CodeTechNL\TaskBridgeFilament\Actions\SyncAction;
 use CodeTechNL\TaskBridgeFilament\Actions\ValidateJobsAction;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource;
@@ -28,6 +29,7 @@ class ListScheduledJobs extends ListRecords
         return [
             SyncAction::make(),
             ValidateJobsAction::make(),
+            ScheduleJobOnceAction::make(),
             Actions\CreateAction::make()->label('Add job'),
         ];
     }

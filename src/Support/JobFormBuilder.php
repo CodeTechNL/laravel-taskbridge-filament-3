@@ -78,6 +78,8 @@ class JobFormBuilder
             if (! array_key_exists($key, $data)) {
                 if ($param->isOptional()) {
                     $args[] = $param->getDefaultValue();
+                } elseif ($param->allowsNull()) {
+                    $args[] = null;
                 }
                 continue;
             }
@@ -104,7 +106,7 @@ class JobFormBuilder
         $name = $param->getName();
         $fieldName = "arg_{$name}";
         $label = (string) str($name)->headline();
-        $required = ! $param->isOptional() && ! $param->allowsNull();
+        $required = ! $param->isOptional();
 
         $typeName = self::typeName($param);
 

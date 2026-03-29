@@ -2,10 +2,10 @@
 
 namespace CodeTechNL\TaskBridgeFilament\Actions;
 
-use CodeTechNL\TaskBridge\Contracts\ScheduledJob as ScheduledJobContract;
 use CodeTechNL\TaskBridge\Models\ScheduledJob;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\HtmlString;
 
 class ValidateJobsAction extends Action
@@ -20,7 +20,7 @@ class ValidateJobsAction extends Action
                 $jobs = ScheduledJob::all();
 
                 $missing = [];
-                $invalidContract = [];
+                $notQueueable = [];
                 $valid = [];
 
                 foreach ($jobs as $job) {
@@ -30,8 +30,8 @@ class ValidateJobsAction extends Action
                         continue;
                     }
 
-                    if (! is_a($job->class, ScheduledJobContract::class, true)) {
-                        $invalidContract[] = $job->class;
+                    if (! is_a($job->class, ShouldQueue::class, true)) {
+                        $notQueueable[] = $job->class;
 
                         continue;
                     }
@@ -39,7 +39,7 @@ class ValidateJobsAction extends Action
                     $valid[] = $job->class;
                 }
 
-                if (empty($missing) && empty($invalidContract)) {
+                if (empty($missing) && empty($notQueueable)) {
                     Notification::make()
                         ->title('All jobs are valid')
                         ->body(count($valid).' job(s) checked — no issues found.')
@@ -58,9 +58,9 @@ class ValidateJobsAction extends Action
                     }
                 }
 
-                if ($invalidContract) {
-                    $lines[] = '<strong>Does not implement ScheduledJob ('.count($invalidContract).'):</strong>';
-                    foreach ($invalidContract as $class) {
+                if ($notQueueable) {
+                    $lines[] = '<strong>Does not implement ShouldQueue ('.count($notQueueable).'):</strong>';
+                    foreach ($notQueueable as $class) {
                         $lines[] = '&nbsp;&nbsp;• '.e($class);
                     }
                 }

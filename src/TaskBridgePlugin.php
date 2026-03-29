@@ -2,11 +2,19 @@
 
 namespace CodeTechNL\TaskBridgeFilament;
 
+use CodeTechNL\TaskBridgeFilament\Pages\TaskBridgeDashboard;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobRunResource;
+use CodeTechNL\TaskBridgeFilament\Widgets\AverageDurationChart;
+use CodeTechNL\TaskBridgeFilament\Widgets\JobStatsOverview;
+use CodeTechNL\TaskBridgeFilament\Widgets\MissedJobsAlert;
+use CodeTechNL\TaskBridgeFilament\Widgets\RecentFailuresWidget;
+use CodeTechNL\TaskBridgeFilament\Widgets\RunHistoryChart;
 use CodeTechNL\TaskBridgeFilament\Widgets\TaskBridgeWidget;
+use CodeTechNL\TaskBridgeFilament\Widgets\UpcomingJobsWidget;
 use Filament\Contracts\Plugin;
 use Filament\Panel;
+use Livewire\Livewire;
 
 class TaskBridgePlugin implements Plugin
 {
@@ -62,6 +70,20 @@ class TaskBridgePlugin implements Plugin
     private array $runLogPaginationPageOptions = [25, 50, 100];
 
     private int $runLogDefaultPaginationPageOption = 25;
+
+    // ── Dashboard ─────────────────────────────────────────────────────────────
+
+    private bool $registerDashboard = true;
+
+    private string $dashboardNavigationGroup = 'System';
+
+    private string $dashboardNavigationLabel = 'Dashboard';
+
+    private string $dashboardNavigationIcon = 'heroicon-o-chart-bar';
+
+    private int $dashboardNavigationSort = 98;
+
+    private string $dashboardTitle = 'TaskBridge Dashboard';
 
     // ── Features ──────────────────────────────────────────────────────────────
 
@@ -119,6 +141,18 @@ class TaskBridgePlugin implements Plugin
 
         if ($this->registerWidget) {
             $panel->widgets([TaskBridgeWidget::class]);
+        }
+
+        if ($this->registerDashboard) {
+            Livewire::component('taskbridge-dashboard', TaskBridgeDashboard::class);
+            Livewire::component('taskbridge-job-stats-overview', JobStatsOverview::class);
+            Livewire::component('taskbridge-run-history-chart', RunHistoryChart::class);
+            Livewire::component('taskbridge-average-duration-chart', AverageDurationChart::class);
+            Livewire::component('taskbridge-recent-failures-widget', RecentFailuresWidget::class);
+            Livewire::component('taskbridge-upcoming-jobs-widget', UpcomingJobsWidget::class);
+            Livewire::component('taskbridge-missed-jobs-alert', MissedJobsAlert::class);
+
+            $panel->pages([TaskBridgeDashboard::class]);
         }
     }
 
@@ -238,6 +272,54 @@ class TaskBridgePlugin implements Plugin
     public function defaultPaginationPageOption(int $size): static
     {
         $this->defaultPaginationPageOption = $size;
+
+        return $this;
+    }
+
+    /** Disable the TaskBridge dashboard page entirely. */
+    public function withoutDashboard(): static
+    {
+        $this->registerDashboard = false;
+
+        return $this;
+    }
+
+    /** Navigation group for the dashboard in the sidebar. */
+    public function dashboardNavigationGroup(string $group): static
+    {
+        $this->dashboardNavigationGroup = $group;
+
+        return $this;
+    }
+
+    /** Navigation label for the dashboard item. */
+    public function dashboardNavigationLabel(string $label): static
+    {
+        $this->dashboardNavigationLabel = $label;
+
+        return $this;
+    }
+
+    /** Navigation icon for the dashboard item (Heroicon name). */
+    public function dashboardNavigationIcon(string $icon): static
+    {
+        $this->dashboardNavigationIcon = $icon;
+
+        return $this;
+    }
+
+    /** Navigation sort order for the dashboard item. */
+    public function dashboardNavigationSort(int $sort): static
+    {
+        $this->dashboardNavigationSort = $sort;
+
+        return $this;
+    }
+
+    /** Page title shown on the dashboard. */
+    public function dashboardTitle(string $title): static
+    {
+        $this->dashboardTitle = $title;
 
         return $this;
     }
@@ -413,5 +495,35 @@ class TaskBridgePlugin implements Plugin
     public function getRunLogDefaultPaginationPageOption(): int
     {
         return $this->runLogDefaultPaginationPageOption;
+    }
+
+    public function shouldRegisterDashboard(): bool
+    {
+        return $this->registerDashboard;
+    }
+
+    public function getDashboardNavigationGroup(): string
+    {
+        return $this->dashboardNavigationGroup;
+    }
+
+    public function getDashboardNavigationLabel(): string
+    {
+        return $this->dashboardNavigationLabel;
+    }
+
+    public function getDashboardNavigationIcon(): string
+    {
+        return $this->dashboardNavigationIcon;
+    }
+
+    public function getDashboardNavigationSort(): int
+    {
+        return $this->dashboardNavigationSort;
+    }
+
+    public function getDashboardTitle(): string
+    {
+        return $this->dashboardTitle;
     }
 }
