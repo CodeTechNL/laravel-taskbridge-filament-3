@@ -46,6 +46,12 @@
             "pestphp/pest-plugin": true
         }
     },
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../laravel-taskbridge"
+        }
+    ],
     "minimum-stability": "dev",
     "prefer-stable": true
 }
