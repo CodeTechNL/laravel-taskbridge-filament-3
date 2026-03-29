@@ -4,6 +4,7 @@ namespace CodeTechNL\TaskBridgeFilament\Resources;
 
 use CodeTechNL\TaskBridge\Contracts\HasCustomLabel;
 use CodeTechNL\TaskBridge\Contracts\HasGroup;
+use CodeTechNL\TaskBridge\Contracts\HidesFromTaskCreation;
 use CodeTechNL\TaskBridge\Enums\RunStatus;
 use CodeTechNL\TaskBridge\Facades\TaskBridge;
 use CodeTechNL\TaskBridge\Models\ScheduledJob;
@@ -11,6 +12,7 @@ use CodeTechNL\TaskBridge\Support\CronTranslator;
 use CodeTechNL\TaskBridge\Support\JobInspector;
 use CodeTechNL\TaskBridgeFilament\Actions\DryRunJobAction;
 use CodeTechNL\TaskBridgeFilament\Actions\RunJobAction;
+use CodeTechNL\TaskBridgeFilament\Support\JobFormBuilder;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\CreateScheduledJob;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\EditScheduledJob;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\ListScheduledJobs;
@@ -108,6 +110,7 @@ class ScheduledJobResource extends Resource
                                 if ($group !== null) {
                                     $set('group', $group);
                                 }
+
                             })
                             ->helperText('Select a job class from the list.')
                             ->rules([
@@ -195,7 +198,36 @@ class ScheduledJobResource extends Resource
                     ])
                     ->columns(2),
 
+            ]),
+
+            Forms\Components\Grid::make(3)->schema([
+                Forms\Components\Section::make('Constructor Arguments')
+                    ->columnSpan(2)
+                    ->schema(function (Forms\Get $get) {
+                        $class = $get('class') ?? '';
+
+                        if (! filled($class)) {
+                            return [Forms\Components\Placeholder::make('_no_class')
+                                ->label('')
+                                ->content('No job has been selected.')
+                                ->extraAttributes(['class' => 'text-sm text-gray-400 italic'])];
+                        }
+
+                        $fields = JobFormBuilder::buildFields($class);
+
+                        if (empty($fields)) {
+                            return [Forms\Components\Placeholder::make('_no_args')
+                                ->label('')
+                                ->content("This job doesn't have any arguments.")
+                                ->extraAttributes(['class' => 'text-sm text-gray-400 italic'])];
+                        }
+
+                        return $fields;
+                    })
+                    ->columns(2),
+
                 Forms\Components\Section::make('Retry Policy')
+                    ->columnSpan(1)
                     ->description('Leave blank to use the config defaults.')
                     ->schema([
                         Forms\Components\TextInput::make('retry_maximum_event_age_seconds')
@@ -205,7 +237,7 @@ class ScheduledJobResource extends Resource
                             ->maxValue(86400)
                             ->default(86400)
                             ->placeholder('86400')
-                            ->helperText('How long EventBridge retains an undelivered event. Range: 60–86 400 (24 h).')
+                            ->helperText('Range: 60–86 400 (24 h).')
                             ->rules([
                                 fn () => function (string $attribute, mixed $value, \Closure $fail) {
                                     if ($value !== null && ($value < 60 || $value > 86400)) {
@@ -221,7 +253,7 @@ class ScheduledJobResource extends Resource
                             ->maxValue(185)
                             ->default(185)
                             ->placeholder('185')
-                            ->helperText('Number of retries on a failed invocation. Range: 0–185.')
+                            ->helperText('Range: 0–185.')
                             ->rules([
                                 fn () => function (string $attribute, mixed $value, \Closure $fail) {
                                     if ($value !== null && ($value < 0 || $value > 185)) {
@@ -229,9 +261,7 @@ class ScheduledJobResource extends Resource
                                     }
                                 },
                             ]),
-                    ])
-                    ->columns(2)
-                    ->collapsed(),
+                    ]),
             ]),
         ]);
     }
@@ -255,13 +285,15 @@ class ScheduledJobResource extends Resource
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('effective_cron')
-                    ->label('Cron')
-                    ->tooltip(fn (ScheduledJob $record) => CronTranslator::describe($record->effective_cron))
+                    ->label('Schedule')
+                    ->getStateUsing(fn (ScheduledJob $record) => $record->isOnce() ? 'once' : $record->effective_cron)
+                    ->tooltip(fn (ScheduledJob $record) => $record->isOnce() ? null : CronTranslator::describe($record->effective_cron))
                     ->badge()
-                    ->color('gray'),
+                    ->color(fn (ScheduledJob $record) => $record->isOnce() ? 'info' : 'gray'),
 
                 Tables\Columns\ToggleColumn::make('enabled')
                     ->label('Enabled')
+                    ->disabled(fn (ScheduledJob $record) => $record->isOnce())
                     ->afterStateUpdated(function (ScheduledJob $record) {
                         $record->enabled
                             ? TaskBridge::enable($record->class)
@@ -284,6 +316,9 @@ class ScheduledJobResource extends Resource
                 Tables\Columns\TextColumn::make('next_run')
                     ->label('Next Run')
                     ->getStateUsing(function (ScheduledJob $record) {
+                        if ($record->isOnce()) {
+                            return $record->run_once_at?->format('Y-m-d H:i') ?? '—';
+                        }
                         try {
                             return CronTranslator::nextRunAt($record->effective_cron)->format('Y-m-d H:i');
                         } catch (\Throwable) {
@@ -304,6 +339,17 @@ class ScheduledJobResource extends Resource
                         collect(RunStatus::cases())
                             ->mapWithKeys(fn (RunStatus $case) => [$case->value => $case->label()])
                             ->toArray()
+                    ),
+
+                Tables\Filters\TernaryFilter::make('run_once_at')
+                    ->label('Type')
+                    ->placeholder('All')
+                    ->trueLabel('One-time only')
+                    ->falseLabel('Recurring only')
+                    ->queries(
+                        true: fn ($query) => $query->whereNotNull('run_once_at'),
+                        false: fn ($query) => $query->whereNull('run_once_at'),
+                        blank: fn ($query) => $query,
                     ),
             ])
             ->actions(self::buildRowActions())
@@ -369,7 +415,7 @@ class ScheduledJobResource extends Resource
     {
         $preventDuplicates = TaskBridgePlugin::get()->shouldPreventDuplicates();
         $registered = app(\CodeTechNL\TaskBridge\TaskBridge::class)->getRegisteredClasses();
-        $existing = ScheduledJob::pluck('class')->flip();
+        $existing = ScheduledJob::recurring()->pluck('class')->flip();
 
         // ── 1. Collect raw data (no HTML yet) ────────────────────────────────
         // Structure: [group => [class => ['label' => string, 'taken' => bool]]]
@@ -377,6 +423,17 @@ class ScheduledJobResource extends Resource
 
         foreach ($registered as $class) {
             if (! class_exists($class)) {
+                continue;
+            }
+
+            // Skip jobs whose constructors require complex (non-scalar) arguments.
+            // These cannot be serialized for a recurring EventBridge schedule without
+            // hardcoded args, and the create form has no way to supply them.
+            if (! JobInspector::hasSimpleConstructor($class)) {
+                continue;
+            }
+
+            if (JobInspector::make($class) instanceof HidesFromTaskCreation) {
                 continue;
             }
 
@@ -426,9 +483,12 @@ class ScheduledJobResource extends Resource
     public static function buildRowActions(): array
     {
         $actions = [
-            RunJobAction::make(),
-            DryRunJobAction::make(),
-            Tables\Actions\EditAction::make(),
+            RunJobAction::make()
+                ->hidden(fn (ScheduledJob $record) => $record->isOnce()),
+            DryRunJobAction::make()
+                ->hidden(fn (ScheduledJob $record) => $record->isOnce()),
+            Tables\Actions\EditAction::make()
+                ->hidden(fn (ScheduledJob $record) => $record->isOnce()),
             Tables\Actions\DeleteAction::make()
                 ->after(function (ScheduledJob $record) {
                     try {

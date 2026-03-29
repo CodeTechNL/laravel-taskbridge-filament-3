@@ -2,6 +2,19 @@
 
 Filament v3 admin panel integration for [laravel-taskbridge](../laravel-taskbridge/README.md). Provides a complete UI for managing scheduled jobs, viewing run history, and triggering manual executions — all without touching AWS directly.
 
+## Features
+
+- **Scheduled Jobs CRUD** — create, edit, view, and delete scheduled jobs; changes auto-sync to EventBridge
+- **One-time job visibility** — one-time schedules appear in the table alongside recurring jobs with an "once" badge; records are kept until pruned
+- **Type filter** — filter the table by job type: all, one-time only, or recurring only
+- **Status dot column** — color-coded indicator showing last run status at a glance
+- **Dynamic constructor argument fields** — scalar constructor parameters (`bool`, `int`, `float`, `string`) render as typed inputs in create/edit forms and in action modals
+- **Run now / Dry run actions** — trigger immediate or simulated execution from the table
+- **Human-readable cron descriptions** — cron expressions are translated to plain English (e.g. `0 8 * * 1` → "Every Monday at 08:00") in the table tooltip and the view page
+- **Activate / Deactivate** — enable or disable a job directly from the view page
+- **Run Logs** — full audit history of every execution with status, duration, trigger type, and structured output
+- **Dashboard widget** — summary of total, active, disabled, and recently-failed jobs
+
 ## Requirements
 
 - PHP 8.3+
@@ -41,17 +54,22 @@ A full CRUD interface for your registered jobs:
 
 - **Create** — select a job class from your registered jobs, configure queue connection, cron expression, retry policy, description, and enable/disable
 - **Edit** — update any settings; saved changes auto-sync to EventBridge
-- **View** — detailed job info with inline run history
-- **Filters** — filter by group, enabled state, last status
+- **View** — detailed job info (class, schedule, status, description, group) with activate/deactivate header actions and inline run history
+- **Filters** — filter by group, enabled state, last status, and job type (one-time / recurring)
 
 **Row actions available on every job:**
 
 | Action | Description |
 |--------|-------------|
-| Run now | Immediately executes the job (bypasses enabled / shouldRun) |
-| Dry run | Calls handle() with Bus::fake() — no real queue dispatches |
-| Edit | Edit job settings |
+| Run now | Immediately executes the job (bypasses enabled / shouldRun). Hidden for one-time jobs. |
+| Dry run | Calls handle() with Bus::fake() — no real queue dispatches. Hidden for one-time jobs. |
+| Edit | Edit job settings. Hidden for one-time jobs. |
+| View | Open the detail page |
 | Delete | Remove from database and EventBridge |
+
+> One-time jobs do not support Run now, Dry run, or Edit — they are read-only once created and self-destruct on EventBridge after firing.
+
+When a job has scalar constructor parameters, **Run now** and **Dry run** each render an input field per parameter inside their confirmation modal. Values are type-cast to the declared PHP type before the job is executed.
 
 **Bulk actions:** Enable selected, Disable selected, Delete selected
 
@@ -61,6 +79,32 @@ A full CRUD interface for your registered jobs:
 |--------|-------------|
 | Sync | Push all enabled jobs to AWS EventBridge Scheduler |
 | Validate | Check that all registered job classes exist and can be loaded |
+
+### Table columns
+
+| Column | Description |
+|--------|-------------|
+| Status dot | Color-coded dot showing last run status (gray = never run) |
+| Job | Label + group description |
+| Schedule | Cron expression badge (or "once" badge for one-time jobs). Hover to see human-readable description. |
+| Enabled | Toggle. Disabled for one-time jobs. |
+| Last Run | Relative time since last execution |
+| Status | Last run status badge |
+| Next Run | Next scheduled time (or the one-time datetime for once jobs) |
+
+### View page
+
+The view page shows two sections side by side:
+
+- **Job** — class name, whether the class exists, description, identifier, group
+- **Schedule** — job type badge (One-time / Recurring), cron expression with human-readable description, enabled status
+
+Header actions:
+- **Activate** — enables the job and syncs to EventBridge (visible when disabled, recurring only)
+- **Deactivate** — disables the job and removes from EventBridge (visible when enabled, recurring only)
+- **Edit** — opens the edit form (recurring only)
+
+The **Run History** relation manager is shown inline at the bottom.
 
 ### Run Logs resource
 
@@ -147,6 +191,32 @@ When you select a job class in the Create form, TaskBridge automatically pre-fil
 - **Group** — from `HasGroup::group()` if implemented, otherwise from the folder name
 
 All of these can be edited before saving. The cron field is required only when the job class does not define a default.
+
+### Constructor arguments in the create/edit form
+
+The **Constructor Arguments** section is always visible in the create and edit forms. Its content depends on the selected job:
+
+- **No job selected** — shows "No job has been selected."
+- **Job has no parameters** — shows "This job doesn't have any arguments."
+- **Job has scalar parameters** — renders a typed input per parameter
+
+The section sits left (2/3 width) in a grid alongside the **Retry Policy** section (1/3 width).
+
+When a job has scalar constructor parameters, fill in the values in the Constructor Arguments section. They are stored on the job record and baked into the SQS payload every time EventBridge fires the recurring schedule.
+
+The Edit form pre-fills the stored values so you can adjust them at any time. Saving re-syncs the updated payload to EventBridge automatically.
+
+Jobs whose constructors require non-scalar types (Eloquent models, service objects, etc.) are filtered out of the class dropdown entirely and cannot be registered through the UI.
+
+**Field types rendered per parameter:**
+
+| PHP type | Filament field |
+|----------|---------------|
+| `bool` | Select (options: True / False) |
+| `int` | Numeric text input (integer) |
+| `float` | Numeric text input |
+| `string` / untyped | Text input |
+| `?type` with `= null` default | Same field, optional — empty value sends `null` to the job |
 
 ## Labels and groups
 

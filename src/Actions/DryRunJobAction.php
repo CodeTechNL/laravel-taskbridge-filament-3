@@ -4,6 +4,9 @@ namespace CodeTechNL\TaskBridgeFilament\Actions;
 
 use CodeTechNL\TaskBridge\Facades\TaskBridge;
 use CodeTechNL\TaskBridge\Models\ScheduledJob;
+use CodeTechNL\TaskBridgeFilament\Support\JobFormBuilder;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Section;
 use Filament\Notifications\Notification;
 use Filament\Tables\Actions\Action;
 
@@ -15,12 +18,21 @@ class DryRunJobAction extends Action
             ->label('Dry run')
             ->icon('heroicon-o-eye')
             ->color('gray')
-            ->requiresConfirmation()
             ->modalHeading('Dry run job')
-            ->modalDescription('This simulates the job without actually dispatching anything. Continue?')
-            ->action(function (ScheduledJob $record) {
+            ->modalDescription(fn (ScheduledJob $record): string => empty(JobFormBuilder::buildFields($record->class))
+                ? 'This simulates the job without actually dispatching anything. Continue?'
+                : 'Fill in the constructor arguments to simulate the job without dispatching anything.'
+            )
+            ->form(fn (ScheduledJob $record): array => [
+                Section::make('Constructor Arguments')
+                    ->schema(! empty(JobFormBuilder::buildFields($record->class))
+                        ? JobFormBuilder::buildFields($record->class)
+                        : [Placeholder::make('_no_args')->label('')->content('No parameters.')->extraAttributes(['class' => 'text-sm text-gray-400 italic'])]),
+            ])
+            ->action(function (ScheduledJob $record, array $data) {
                 try {
-                    $run = TaskBridge::run($record->class, dryRun: true, force: true);
+                    $arguments = JobFormBuilder::resolveArguments($record->class, $data);
+                    $run = TaskBridge::run($record->class, dryRun: true, force: true, arguments: $arguments);
 
                     Notification::make()
                         ->title('Dry run complete')

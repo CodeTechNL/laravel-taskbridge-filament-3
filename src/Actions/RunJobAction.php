@@ -4,6 +4,9 @@ namespace CodeTechNL\TaskBridgeFilament\Actions;
 
 use CodeTechNL\TaskBridge\Facades\TaskBridge;
 use CodeTechNL\TaskBridge\Models\ScheduledJob;
+use CodeTechNL\TaskBridgeFilament\Support\JobFormBuilder;
+use Filament\Forms\Components\Placeholder;
+use Filament\Forms\Components\Section;
 use Filament\Notifications\Notification;
 use Filament\Tables\Actions\Action;
 
@@ -15,12 +18,21 @@ class RunJobAction extends Action
             ->label('Run now')
             ->icon('heroicon-o-play')
             ->color('success')
-            ->requiresConfirmation()
             ->modalHeading('Run job now')
-            ->modalDescription('This will immediately dispatch the job. Continue?')
-            ->action(function (ScheduledJob $record) {
+            ->modalDescription(fn (ScheduledJob $record): string => empty(JobFormBuilder::buildFields($record->class))
+                ? 'This will immediately execute the job. Continue?'
+                : 'Fill in the constructor arguments and run the job.'
+            )
+            ->form(fn (ScheduledJob $record): array => [
+                Section::make('Constructor Arguments')
+                    ->schema(! empty(JobFormBuilder::buildFields($record->class))
+                        ? JobFormBuilder::buildFields($record->class)
+                        : [Placeholder::make('_no_args')->label('')->content('No parameters.')->extraAttributes(['class' => 'text-sm text-gray-400 italic'])]),
+            ])
+            ->action(function (ScheduledJob $record, array $data) {
                 try {
-                    $run = TaskBridge::run($record->class, force: true);
+                    $arguments = JobFormBuilder::resolveArguments($record->class, $data);
+                    $run = TaskBridge::run($record->class, force: true, arguments: $arguments);
 
                     Notification::make()
                         ->title('Job dispatched: '.$run->status->label())

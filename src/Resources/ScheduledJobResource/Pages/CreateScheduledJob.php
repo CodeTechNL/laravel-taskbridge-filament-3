@@ -6,6 +6,7 @@ use CodeTechNL\TaskBridge\Facades\TaskBridge;
 use CodeTechNL\TaskBridge\Models\ScheduledJob;
 use CodeTechNL\TaskBridge\Support\JobInspector;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource;
+use CodeTechNL\TaskBridgeFilament\Support\JobFormBuilder;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Contracts\Queue\ShouldQueue;
 
@@ -35,6 +36,15 @@ class CreateScheduledJob extends CreateRecord
             // Prefer the group already set via the form (auto-detected or user-typed).
             // Fall back to resolveGroup() so the DB is always populated correctly.
             $data['group'] = $data['group'] ?? ScheduledJobResource::resolveGroup($class);
+        }
+
+        // Collect arg_* fields into a positional constructor_arguments array,
+        // then remove them so they don't land in unknown DB columns.
+        $data['constructor_arguments'] = JobFormBuilder::resolveArguments($class, $data);
+        foreach (array_keys($data) as $key) {
+            if (str_starts_with($key, 'arg_')) {
+                unset($data[$key]);
+            }
         }
 
         // Strip internal hint fields — they are dehydrated(false) but guard anyway

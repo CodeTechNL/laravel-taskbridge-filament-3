@@ -70,6 +70,31 @@ dispatch(new ($record->class));
 
 **No `BadgeColumn`.** Filament 3 uses `TextColumn->badge()` only.
 
+**One-time jobs are read-only in the table.** Run now, Dry run, and Edit row actions are hidden for one-time jobs (`$record->isOnce()`). The enabled toggle is also disabled for them. Never show `ScheduleOnceAction` as a row action — it was removed from the table entirely.
+
+**`ScheduleOnceAction` is not a table row action.** One-time scheduling is done from outside the table (e.g. a header action or a separate flow). Do not re-add it to `buildRowActions()`.
+
+**Bool constructor parameters render as a Select, not a Toggle.** The options are `['1' => 'True', '0' => 'False']`. Never use `Toggle` for constructor argument fields:
+```php
+// correct
+Select::make($fieldName)->options(['1' => 'True', '0' => 'False'])
+// wrong
+Toggle::make($fieldName)
+```
+
+**The Constructor Arguments section is always visible.** It never conditionally hides itself. Instead it shows one of three states based on `$get('class')`:
+1. No class selected → `Placeholder` with "No job has been selected."
+2. Class has no scalar params → `Placeholder` with "This job doesn't have any arguments."
+3. Class has scalar params → the fields from `JobFormBuilder::buildFields()`
+
+**Form layout: Constructor Arguments (span 2) + Retry Policy (span 1) in a Grid::make(3).** Always place these two sections together in this grid. Constructor Arguments comes first (left, 66%), Retry Policy comes second (right, 33%).
+
+**`buildClassOptions()` uses `ScheduledJob::recurring()` scope.** When checking for already-registered ("taken") classes, scope the query to recurring jobs only — one-time job rows must not mark a class as taken.
+
+**The `_status_dot` column is a `ColorColumn`.** It derives its color from `$record->last_status?->color() ?? 'gray'`. It has no label and a fixed width of `4px`. It is the leftmost column in the table.
+
+**Activate/Deactivate on the view page use `$this->record = $this->record->fresh()` to refresh.** `refreshFormData()` does not exist on `ViewRecord`. After the action runs, reload the record with `->fresh()` to reflect the new enabled state in the infolist.
+
 ## Further reading
 
 - @README.md — plugin configuration and all available options
