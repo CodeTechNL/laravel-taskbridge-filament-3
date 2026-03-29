@@ -4,6 +4,7 @@ namespace CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages;
 
 use CodeTechNL\TaskBridge\Facades\TaskBridge;
 use CodeTechNL\TaskBridge\Models\ScheduledJob;
+use CodeTechNL\TaskBridge\Support\JobInspector;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -22,7 +23,7 @@ class CreateScheduledJob extends CreateRecord
         $class = $data['class'];
 
         if (class_exists($class) && is_a($class, ShouldQueue::class, true)) {
-            $instance = new $class;
+            $instance = JobInspector::make($class);
             $data['identifier'] = ScheduledJob::identifierFromClass($class);
 
             // Store the class default separately from the user-provided override.

@@ -8,6 +8,7 @@ use CodeTechNL\TaskBridge\Enums\RunStatus;
 use CodeTechNL\TaskBridge\Facades\TaskBridge;
 use CodeTechNL\TaskBridge\Models\ScheduledJob;
 use CodeTechNL\TaskBridge\Support\CronTranslator;
+use CodeTechNL\TaskBridge\Support\JobInspector;
 use CodeTechNL\TaskBridgeFilament\Actions\DryRunJobAction;
 use CodeTechNL\TaskBridgeFilament\Actions\RunJobAction;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\CreateScheduledJob;
@@ -94,7 +95,7 @@ class ScheduledJobResource extends Resource
 
                                 $set('_identifier_hint', ScheduledJob::identifierFromClass($state));
 
-                                $instance = new $state;
+                                $instance = JobInspector::make($state);
 
                                 $cron = method_exists($instance, 'cronExpression')
                                     ? $instance->cronExpression()
@@ -169,7 +170,7 @@ class ScheduledJobResource extends Resource
                                         return;
                                     }
 
-                                    $instance = new $class;
+                                    $instance = JobInspector::make($class);
                                     $hasCron = method_exists($instance, 'cronExpression')
                                         && $instance->cronExpression() !== null;
 
@@ -475,7 +476,7 @@ class ScheduledJobResource extends Resource
             return class_basename($class).' ⚠';
         }
 
-        $instance = new $class;
+        $instance = JobInspector::make($class);
 
         if ($instance instanceof HasCustomLabel) {
             return $instance->taskLabel();
@@ -499,7 +500,7 @@ class ScheduledJobResource extends Resource
             return null;
         }
 
-        $instance = new $class;
+        $instance = JobInspector::make($class);
 
         if ($instance instanceof HasGroup) {
             return $instance->group();
