@@ -216,7 +216,8 @@ Jobs whose constructors require non-scalar types (Eloquent models, service objec
 | `int` | Numeric text input (integer) |
 | `float` | Numeric text input |
 | `string` / untyped | Text input |
-| `?type` with `= null` default | Same field, optional — empty value sends `null` to the job |
+| `?type` (required, no default) | Same field as its base type, **marked required** — empty submission sends `null` to the job |
+| `?type` with `= null` default | Same field, optional — empty submission sends `null`; a helper text hint is shown |
 
 ## Labels and groups
 
