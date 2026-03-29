@@ -20,6 +20,14 @@ If `vendor/` is missing, run `composer install` first.
 
 **Interface names are final.** The four optional interfaces from the core package are: `RunsConditionally`, `HasGroup`, `HasCustomLabel`, `ReportsTaskOutput`. Do not use or reference the old names (`ConditionalJob`, `GroupedJob`, `LabeledJob`, `ReportsOutput`). Do not reference `ScheduledJob` — it no longer exists.
 
+**`ReportsTaskOutput` requires `reportOutput()`.** The interface now declares `reportOutput(array $metadata): void` — it is no longer a marker. Add the `HasJobOutput` trait to satisfy it:
+```php
+class ImportProducts implements ReportsTaskOutput, ShouldQueue
+{
+    use HasJobOutput; // satisfies reportOutput()
+}
+```
+
 **Always use enum cases in column closures.** `RunStatus` and `TriggeredBy` are Eloquent-cast enums. Filament passes the cast value, not a string:
 ```php
 // correct
