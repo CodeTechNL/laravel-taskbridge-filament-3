@@ -57,7 +57,7 @@ class CreateScheduledJob extends CreateRecord
         $this->data['class'] = $class;
         $this->data['_identifier_hint'] = ScheduledJob::identifierFromClass($class);
 
-        $attr     = JobInspector::getSchedulableJobAttribute($class);
+        $attr = JobInspector::getSchedulableJobAttribute($class);
         $instance = JobInspector::make($class);
 
         $cron = $attr?->cron

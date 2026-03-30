@@ -98,12 +98,12 @@ describe('JobFormBuilder', function () {
         it('resolves all scalar types from form data', function () {
             $data = [
                 'arg_recipient' => 'hello@example.com',
-                'arg_note'      => 'some note',
-                'arg_retries'   => '3',
+                'arg_note' => 'some note',
+                'arg_retries' => '3',
                 'arg_threshold' => '0.75',
-                'arg_notify'    => '1',
-                'arg_mode'      => 'slow',
-                'arg_limit'     => '100',
+                'arg_notify' => '1',
+                'arg_mode' => 'slow',
+                'arg_limit' => '100',
             ];
 
             $args = JobFormBuilder::resolveArguments(ScalarArgJob::class, $data);
@@ -120,10 +120,10 @@ describe('JobFormBuilder', function () {
         it('casts bool "0" to false', function () {
             $data = [
                 'arg_recipient' => 'a@b.com',
-                'arg_note'      => null,
-                'arg_retries'   => '1',
+                'arg_note' => null,
+                'arg_retries' => '1',
                 'arg_threshold' => '1.0',
-                'arg_notify'    => '0',
+                'arg_notify' => '0',
             ];
 
             $args = JobFormBuilder::resolveArguments(ScalarArgJob::class, $data);
@@ -134,10 +134,10 @@ describe('JobFormBuilder', function () {
         it('passes null for a required nullable param submitted as empty string', function () {
             $data = [
                 'arg_recipient' => 'a@b.com',
-                'arg_note'      => '',          // empty string → null
-                'arg_retries'   => '1',
+                'arg_note' => '',          // empty string → null
+                'arg_retries' => '1',
                 'arg_threshold' => '1.0',
-                'arg_notify'    => '1',
+                'arg_notify' => '1',
             ];
 
             $args = JobFormBuilder::resolveArguments(ScalarArgJob::class, $data);
@@ -149,9 +149,9 @@ describe('JobFormBuilder', function () {
             $data = [
                 'arg_recipient' => 'a@b.com',
                 // arg_note intentionally absent
-                'arg_retries'   => '1',
+                'arg_retries' => '1',
                 'arg_threshold' => '1.0',
-                'arg_notify'    => '1',
+                'arg_notify' => '1',
             ];
 
             $args = JobFormBuilder::resolveArguments(ScalarArgJob::class, $data);
@@ -165,10 +165,10 @@ describe('JobFormBuilder', function () {
         it('falls back to the declared default for an optional param not in data', function () {
             $data = [
                 'arg_recipient' => 'a@b.com',
-                'arg_note'      => null,
-                'arg_retries'   => '2',
+                'arg_note' => null,
+                'arg_retries' => '2',
                 'arg_threshold' => '0.5',
-                'arg_notify'    => '1',
+                'arg_notify' => '1',
                 // arg_mode and arg_limit absent — should use defaults
             ];
 
@@ -181,12 +181,12 @@ describe('JobFormBuilder', function () {
         it('passes null for an optional nullable param submitted as empty string', function () {
             $data = [
                 'arg_recipient' => 'a@b.com',
-                'arg_note'      => null,
-                'arg_retries'   => '2',
+                'arg_note' => null,
+                'arg_retries' => '2',
                 'arg_threshold' => '0.5',
-                'arg_notify'    => '1',
-                'arg_mode'      => 'fast',
-                'arg_limit'     => '',       // empty string → null
+                'arg_notify' => '1',
+                'arg_mode' => 'fast',
+                'arg_limit' => '',       // empty string → null
             ];
 
             $args = JobFormBuilder::resolveArguments(ScalarArgJob::class, $data);
@@ -197,12 +197,12 @@ describe('JobFormBuilder', function () {
         it('produces a positional array that can be splatted to construct the job', function () {
             $data = [
                 'arg_recipient' => 'test@example.com',
-                'arg_note'      => null,
-                'arg_retries'   => '5',
+                'arg_note' => null,
+                'arg_retries' => '5',
                 'arg_threshold' => '0.9',
-                'arg_notify'    => '1',
-                'arg_mode'      => 'fast',
-                'arg_limit'     => null,
+                'arg_notify' => '1',
+                'arg_mode' => 'fast',
+                'arg_limit' => null,
             ];
 
             $args = JobFormBuilder::resolveArguments(ScalarArgJob::class, $data);

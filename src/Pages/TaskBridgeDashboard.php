@@ -10,6 +10,7 @@ use CodeTechNL\TaskBridgeFilament\Widgets\RecentFailuresWidget;
 use CodeTechNL\TaskBridgeFilament\Widgets\RunHistoryChart;
 use CodeTechNL\TaskBridgeFilament\Widgets\UpcomingJobsWidget;
 use Filament\Pages\Dashboard;
+use Illuminate\Contracts\Support\Htmlable;
 
 class TaskBridgeDashboard extends Dashboard
 {
@@ -35,7 +36,7 @@ class TaskBridgeDashboard extends Dashboard
         return TaskBridgePlugin::get()->getDashboardNavigationSort();
     }
 
-    public function getTitle(): string|\Illuminate\Contracts\Support\Htmlable
+    public function getTitle(): string|Htmlable
     {
         return TaskBridgePlugin::get()->getDashboardTitle();
     }

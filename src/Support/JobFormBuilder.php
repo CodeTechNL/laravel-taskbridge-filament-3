@@ -3,6 +3,8 @@
 namespace CodeTechNL\TaskBridgeFilament\Support;
 
 use CodeTechNL\TaskBridge\Support\JobInspector;
+use Filament\Forms\Components\Component;
+use Filament\Forms\Components\Field;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use ReflectionNamedType;
@@ -27,7 +29,7 @@ class JobFormBuilder
      * Field naming convention: "arg_{paramName}" — e.g. "arg_recipient".
      * This prefix avoids collisions with other form fields (run_date, etc.).
      *
-     * @return \Filament\Forms\Components\Component[]
+     * @return Component[]
      */
     public static function buildFields(string $class): array
     {
@@ -81,6 +83,7 @@ class JobFormBuilder
                 } elseif ($param->allowsNull()) {
                     $args[] = null;
                 }
+
                 continue;
             }
 
@@ -90,6 +93,7 @@ class JobFormBuilder
             // back to its own config/default logic (e.g. ?int $days = null).
             if ($param->allowsNull() && ($value === null || $value === '')) {
                 $args[] = null;
+
                 continue;
             }
 
@@ -101,7 +105,7 @@ class JobFormBuilder
 
     // ── Private helpers ───────────────────────────────────────────────────────
 
-    private static function buildFieldForParam(ReflectionParameter $param): \Filament\Forms\Components\Field
+    private static function buildFieldForParam(ReflectionParameter $param): Field
     {
         $name = $param->getName();
         $fieldName = "arg_{$name}";
@@ -151,8 +155,8 @@ class JobFormBuilder
     private static function castValue(mixed $value, ReflectionParameter $param): mixed
     {
         return match (self::typeName($param)) {
-            'bool'  => (bool) $value,
-            'int'   => (int) $value,
+            'bool' => (bool) $value,
+            'int' => (int) $value,
             'float' => (float) $value,
             default => (string) $value,
         };

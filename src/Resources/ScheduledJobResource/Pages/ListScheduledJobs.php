@@ -2,12 +2,14 @@
 
 namespace CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages;
 
+use CodeTechNL\TaskBridgeFilament\Actions\ImportSchedulesAction;
 use CodeTechNL\TaskBridgeFilament\Actions\ScheduleJobOnceAction;
 use CodeTechNL\TaskBridgeFilament\Actions\SyncAction;
 use CodeTechNL\TaskBridgeFilament\Actions\ValidateJobsAction;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource;
 use CodeTechNL\TaskBridgeFilament\TaskBridgePlugin;
 use Filament\Actions;
+use Filament\Actions\ActionGroup;
 use Filament\Resources\Pages\ListRecords;
 
 class ListScheduledJobs extends ListRecords
@@ -27,8 +29,11 @@ class ListScheduledJobs extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            SyncAction::make(),
-            ValidateJobsAction::make(),
+            ActionGroup::make([
+                SyncAction::make(),
+                ValidateJobsAction::make(),
+                ImportSchedulesAction::make(),
+            ])->label('Tools')->icon('heroicon-o-wrench-screwdriver')->color('gray')->button()->outlined(),
             ScheduleJobOnceAction::make(),
             Actions\CreateAction::make()->label('Add job'),
         ];

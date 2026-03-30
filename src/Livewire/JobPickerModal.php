@@ -3,13 +3,14 @@
 namespace CodeTechNL\TaskBridgeFilament\Livewire;
 
 use CodeTechNL\TaskBridge\Contracts\HidesFromTaskCreation;
-use CodeTechNL\TaskBridgeFilament\Enums\JobPickerSize;
-use Livewire\Attributes\On;
 use CodeTechNL\TaskBridge\Support\JobDiscoverer;
 use CodeTechNL\TaskBridge\Support\JobInspector;
 use CodeTechNL\TaskBridge\TaskBridge;
+use CodeTechNL\TaskBridgeFilament\Enums\JobPickerSize;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource;
+use Illuminate\View\View;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\On;
 use Livewire\Component;
 
 class JobPickerModal extends Component
@@ -17,8 +18,11 @@ class JobPickerModal extends Component
     public JobPickerSize $size = JobPickerSize::Medium;
 
     public string $search = '';
+
     public ?string $currentClass = null;
+
     public ?string $currentLabel = null;
+
     public bool $hasError = false;
 
     public function selectJob(string $class): void
@@ -50,12 +54,12 @@ class JobPickerModal extends Component
         $registered = app(TaskBridge::class)->getRegisteredClasses();
 
         $paths = config('taskbridge.auto_discovery.paths', []);
-        $mode  = config('taskbridge.auto_discovery.mode', 'interface');
+        $mode = config('taskbridge.auto_discovery.mode', 'interface');
 
         $allDiscovered = match ($mode) {
             'attribute' => JobDiscoverer::discoverAllByAttribute($paths),
             'interface' => JobDiscoverer::discoverAll($paths),
-            default     => [],
+            default => [],
         };
 
         $allClasses = array_unique(array_merge($registered, $allDiscovered));
@@ -93,9 +97,9 @@ class JobPickerModal extends Component
             $compatible = JobInspector::hasSimpleConstructor($class);
 
             $jobs[$group][] = [
-                'class'              => $class,
-                'label'              => $label,
-                'compatible'         => $compatible,
+                'class' => $class,
+                'label' => $label,
+                'compatible' => $compatible,
                 'incompatibleParams' => $compatible ? [] : JobInspector::getIncompatibleConstructorParams($class),
             ];
         }
@@ -109,7 +113,7 @@ class JobPickerModal extends Component
         return $jobs;
     }
 
-    public function render(): \Illuminate\View\View
+    public function render(): View
     {
         return view('taskbridge-filament::livewire.job-picker-modal');
     }

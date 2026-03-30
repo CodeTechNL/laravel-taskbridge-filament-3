@@ -13,13 +13,13 @@ use CodeTechNL\TaskBridge\Support\CronTranslator;
 use CodeTechNL\TaskBridge\Support\JobInspector;
 use CodeTechNL\TaskBridgeFilament\Actions\DryRunJobAction;
 use CodeTechNL\TaskBridgeFilament\Actions\RunJobAction;
-use CodeTechNL\TaskBridgeFilament\Support\JobFormBuilder;
 use CodeTechNL\TaskBridgeFilament\Livewire\JobPickerModal;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\CreateScheduledJob;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\EditScheduledJob;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\ListScheduledJobs;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\ViewScheduledJob;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\RelationManagers\RunsRelationManager;
+use CodeTechNL\TaskBridgeFilament\Support\JobFormBuilder;
 use CodeTechNL\TaskBridgeFilament\TaskBridgePlugin;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -90,6 +90,7 @@ class ScheduledJobResource extends Resource
                                 fn () => function (string $attribute, mixed $value, \Closure $fail) {
                                     if (! $value) {
                                         $fail('Please select a job.');
+
                                         return;
                                     }
                                     if (! TaskBridgePlugin::get()->shouldPreventDuplicates()) {
