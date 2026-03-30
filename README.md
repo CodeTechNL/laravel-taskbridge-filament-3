@@ -2,6 +2,8 @@
 
 Filament v3 admin panel integration for [laravel-taskbridge](../laravel-taskbridge/README.md). Provides a complete UI for managing scheduled jobs, viewing run history, and triggering manual executions — all without touching AWS directly.
 
+> **Filament v4 support is coming soon.** This package targets Filament v3. A dedicated `codetechnl/laravel-taskbridge-filament-4` package is in development.
+
 ## Features
 
 - **Scheduled Jobs CRUD** — create, edit, view, and delete scheduled jobs; changes auto-sync to EventBridge
