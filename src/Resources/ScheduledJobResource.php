@@ -269,7 +269,7 @@ class ScheduledJobResource extends Resource
                 Tables\Columns\TextColumn::make('effective_cron')
                     ->label('Schedule')
                     ->getStateUsing(fn (ScheduledJob $record) => $record->isOnce() ? 'once' : $record->effective_cron)
-                    ->tooltip(fn (ScheduledJob $record) => $record->isOnce() ? null : CronTranslator::describe($record->effective_cron))
+                    ->tooltip(fn (ScheduledJob $record) => ($record->isOnce() || $record->effective_cron === null) ? null : CronTranslator::describe($record->effective_cron))
                     ->badge()
                     ->color(fn (ScheduledJob $record) => $record->isOnce() ? 'info' : 'gray'),
 
