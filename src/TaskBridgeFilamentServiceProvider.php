@@ -2,7 +2,9 @@
 
 namespace CodeTechNL\TaskBridgeFilament;
 
+use CodeTechNL\TaskBridgeFilament\Livewire\JobPickerModal;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Livewire;
 
 class TaskBridgeFilamentServiceProvider extends ServiceProvider
 {
@@ -11,6 +13,8 @@ class TaskBridgeFilamentServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'taskbridge-filament');
+
+        Livewire::component('taskbridge-job-picker', JobPickerModal::class);
 
         if ($this->app->runningInConsole()) {
             $this->publishes([

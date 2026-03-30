@@ -14,6 +14,7 @@ use CodeTechNL\TaskBridge\Support\JobInspector;
 use CodeTechNL\TaskBridgeFilament\Actions\DryRunJobAction;
 use CodeTechNL\TaskBridgeFilament\Actions\RunJobAction;
 use CodeTechNL\TaskBridgeFilament\Support\JobFormBuilder;
+use CodeTechNL\TaskBridgeFilament\Livewire\JobPickerModal;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\CreateScheduledJob;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\EditScheduledJob;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource\Pages\ListScheduledJobs;
@@ -82,41 +83,16 @@ class ScheduledJobResource extends Resource
             Forms\Components\Grid::make(2)->schema([
                 Forms\Components\Section::make('Job class')
                     ->schema([
-                        // CREATE: searchable grouped dropdown of registered classes
-                        Forms\Components\Select::make('class')
-                            ->label('Job')
-                            ->options(fn () => self::buildClassOptions())
-                            ->allowHtml()
-                            ->searchable()
-                            ->required()
+                        // CREATE: job picker modal (Livewire component) + hidden class field
+                        Forms\Components\Hidden::make('class')
                             ->visibleOn('create')
-                            ->live()
-                            ->afterStateUpdated(function (Forms\Set $set, ?string $state) {
-                                if (! $state || ! class_exists($state)) {
-                                    return;
-                                }
-
-                                $set('_identifier_hint', ScheduledJob::identifierFromClass($state));
-
-                                $attr = JobInspector::getSchedulableJobAttribute($state);
-                                $instance = JobInspector::make($state);
-
-                                $cron = $attr?->cron
-                                    ?? ($instance instanceof HasPredefinedCronExpression ? $instance->cronExpression() : null);
-                                if ($cron !== null) {
-                                    $set('cron_override', $cron);
-                                }
-
-                                $group = self::resolveGroup($state);
-                                if ($group !== null) {
-                                    $set('group', $group);
-                                }
-
-                            })
-                            ->helperText('Select a job class from the list.')
                             ->rules([
                                 fn () => function (string $attribute, mixed $value, \Closure $fail) {
-                                    if (! $value || ! TaskBridgePlugin::get()->shouldPreventDuplicates()) {
+                                    if (! $value) {
+                                        $fail('Please select a job.');
+                                        return;
+                                    }
+                                    if (! TaskBridgePlugin::get()->shouldPreventDuplicates()) {
                                         return;
                                     }
                                     if (ScheduledJob::where('class', $value)->exists()) {
@@ -124,6 +100,12 @@ class ScheduledJobResource extends Resource
                                     }
                                 },
                             ]),
+
+                        Forms\Components\Livewire::make(JobPickerModal::class, [
+                            'size' => TaskBridgePlugin::get()->getJobPickerSize(),
+                        ])
+                            ->key('taskbridge-job-picker')
+                            ->visibleOn('create'),
 
                         // EDIT: read-only display of the class
                         Forms\Components\TextInput::make('class')

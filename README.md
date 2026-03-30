@@ -127,6 +127,8 @@ A stats overview widget showing:
 All options are set fluently on `TaskBridgePlugin::make()`:
 
 ```php
+use CodeTechNL\TaskBridgeFilament\Enums\JobPickerSize;
+
 TaskBridgePlugin::make()
     ->navigationGroup('Infrastructure')
     ->navigationLabel('Scheduler')
@@ -137,10 +139,11 @@ TaskBridgePlugin::make()
     ->subheading('Manage your AWS EventBridge schedules')
     ->paginationPageOptions([10, 25, 50])
     ->defaultPaginationPageOption(25)
-    ->groupActions()          // collapse row actions into a dropdown
-    ->preventDuplicates(true) // block the same class being registered twice
-    ->withoutWidget()         // remove the stats widget
-    ->withoutRunLog()         // remove the Run Logs page
+    ->groupActions()                         // collapse row actions into a dropdown
+    ->preventDuplicates(true)                // block the same class being registered twice
+    ->jobPickerSize(JobPickerSize::Large)    // Medium (default), Large, or Xl
+    ->withoutWidget()                        // remove the stats widget
+    ->withoutRunLog()                        // remove the Run Logs page
     ->runLogNavigationLabel('Job History')
     ->runLogSlug('job-history')
     ->runLogPaginationPageOptions([25, 50])
@@ -163,6 +166,7 @@ TaskBridgePlugin::make()
 | `subheading(string)` | `null` | Subtitle below H1 |
 | `preventDuplicates(bool)` | `true` | Block duplicate job registrations |
 | `groupActions(bool)` | `false` | Collapse row actions into a dropdown |
+| `jobPickerSize(JobPickerSize)` | `JobPickerSize::Medium` | Size of the job picker modal. `Medium` = 48rem / 2 cols, `Large` = 72rem / 3 cols, `Xl` = 90rem / 4 cols |
 | `paginationPageOptions(array)` | `[25, 50, 100]` | Page size options |
 | `defaultPaginationPageOption(int)` | `25` | Default page size |
 | `withoutWidget()` | — | Do not register the stats widget |
@@ -188,13 +192,24 @@ The policy is applied to `ScheduledJobResource`. Standard Filament policy method
 
 ## Creating a job in the UI
 
-When you select a job class in the Create form, TaskBridge automatically pre-fills:
+### Job picker modal
+
+On the Create page, clicking **Browse jobs** opens a modal that lists all discovered job classes grouped by their group. Use the search box to filter by name or group.
+
+- **Compatible jobs** (scalar constructor only) — shown as clickable cards. Click one to select it.
+- **Incompatible jobs** (non-scalar constructor parameters) — shown as disabled cards with a red warning that lists the offending parameters. These cannot be scheduled from the UI without code changes.
+
+Once a job is selected, TaskBridge automatically pre-fills:
 
 - **Identifier** — derived from the class name + name prefix
 - **Cron expression** — from `#[SchedulableJob(cron:)]` if set, otherwise from `HasPredefinedCronExpression::cronExpression()` if implemented
 - **Group** — from `#[SchedulableJob(group:)]` if set, otherwise from `HasGroup::group()` if implemented, otherwise from the folder name
 
 All of these can be edited before saving. The cron field is required only when the job class does not define a default via the attribute or the interface.
+
+Submitting the form without selecting a job shows a danger notification and highlights the Browse button in red.
+
+The Create page also shows **Cancel**, **Save & create another**, and **Create** actions in the page header, mirroring the bottom form buttons.
 
 ### Constructor arguments in the create/edit form
 
@@ -209,8 +224,6 @@ The section sits left (2/3 width) in a grid alongside the **Retry Policy** secti
 When a job has scalar constructor parameters, fill in the values in the Constructor Arguments section. They are stored on the job record and baked into the SQS payload every time EventBridge fires the recurring schedule.
 
 The Edit form pre-fills the stored values so you can adjust them at any time. Saving re-syncs the updated payload to EventBridge automatically.
-
-Jobs whose constructors require non-scalar types (Eloquent models, service objects, etc.) are filtered out of the class dropdown entirely and cannot be registered through the UI.
 
 **Field types rendered per parameter:**
 

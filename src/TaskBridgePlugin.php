@@ -2,6 +2,7 @@
 
 namespace CodeTechNL\TaskBridgeFilament;
 
+use CodeTechNL\TaskBridgeFilament\Enums\JobPickerSize;
 use CodeTechNL\TaskBridgeFilament\Pages\TaskBridgeDashboard;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobRunResource;
@@ -20,13 +21,13 @@ class TaskBridgePlugin implements Plugin
 {
     // ── Navigation ────────────────────────────────────────────────────────────
 
-    private string $navigationGroup = 'System';
+    private string $navigationGroup = 'Task Bridge';
 
     private string $navigationLabel = 'Scheduled Jobs';
 
     private string $navigationIcon = 'heroicon-o-clock';
 
-    private int $navigationSort = 99;
+    private int $navigationSort = 2;
 
     // ── Page content ──────────────────────────────────────────────────────────
 
@@ -75,15 +76,19 @@ class TaskBridgePlugin implements Plugin
 
     private bool $registerDashboard = true;
 
-    private string $dashboardNavigationGroup = 'System';
+    private string $dashboardNavigationGroup = 'Task Bridge';
 
     private string $dashboardNavigationLabel = 'Dashboard';
 
     private string $dashboardNavigationIcon = 'heroicon-o-chart-bar';
 
-    private int $dashboardNavigationSort = 98;
+    private int $dashboardNavigationSort = 1;
 
     private string $dashboardTitle = 'TaskBridge Dashboard';
+
+    // ── Job picker ────────────────────────────────────────────────────────────
+
+    private JobPickerSize $jobPickerSize = JobPickerSize::Medium;
 
     // ── Features ──────────────────────────────────────────────────────────────
 
@@ -272,6 +277,13 @@ class TaskBridgePlugin implements Plugin
     public function defaultPaginationPageOption(int $size): static
     {
         $this->defaultPaginationPageOption = $size;
+
+        return $this;
+    }
+
+    public function jobPickerSize(JobPickerSize $size): static
+    {
+        $this->jobPickerSize = $size;
 
         return $this;
     }
@@ -495,6 +507,11 @@ class TaskBridgePlugin implements Plugin
     public function getRunLogDefaultPaginationPageOption(): int
     {
         return $this->runLogDefaultPaginationPageOption;
+    }
+
+    public function getJobPickerSize(): JobPickerSize
+    {
+        return $this->jobPickerSize;
     }
 
     public function shouldRegisterDashboard(): bool

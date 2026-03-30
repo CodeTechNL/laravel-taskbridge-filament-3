@@ -8,7 +8,11 @@ use CodeTechNL\TaskBridge\Models\ScheduledJob;
 use CodeTechNL\TaskBridge\Support\JobInspector;
 use CodeTechNL\TaskBridgeFilament\Resources\ScheduledJobResource;
 use CodeTechNL\TaskBridgeFilament\Support\JobFormBuilder;
+use Filament\Actions\Action;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
+use Filament\Support\Exceptions\Halt;
+use Livewire\Attributes\On;
 
 class CreateScheduledJob extends CreateRecord
 {
@@ -19,9 +23,71 @@ class CreateScheduledJob extends CreateRecord
         return 'Add scheduled job';
     }
 
+    protected function getHeaderActions(): array
+    {
+        return [
+            Action::make('cancel')
+                ->label('Cancel')
+                ->color('gray')
+                ->url($this->getResource()::getUrl('index')),
+
+            Action::make('createAnother')
+                ->label('Save & create another')
+                ->color('gray')
+                ->action('createAnother'),
+
+            Action::make('save')
+                ->label('Create')
+                ->action('create'),
+        ];
+    }
+
+    /**
+     * Called when the JobPickerModal dispatches 'taskbridge-job-selected'.
+     * Updates form state and triggers side-effects that mirror what the old
+     * Select::afterStateUpdated() callback used to do.
+     */
+    #[On('taskbridge-job-selected')]
+    public function onJobSelected(string $class): void
+    {
+        if (! class_exists($class)) {
+            return;
+        }
+
+        $this->data['class'] = $class;
+        $this->data['_identifier_hint'] = ScheduledJob::identifierFromClass($class);
+
+        $attr     = JobInspector::getSchedulableJobAttribute($class);
+        $instance = JobInspector::make($class);
+
+        $cron = $attr?->cron
+            ?? ($instance instanceof HasPredefinedCronExpression ? $instance->cronExpression() : null);
+
+        if ($cron !== null) {
+            $this->data['cron_override'] = $cron;
+        }
+
+        $group = ScheduledJobResource::resolveGroup($class);
+        if ($group !== null) {
+            $this->data['group'] = $group;
+        }
+    }
+
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        $class = $data['class'];
+        $class = $data['class'] ?? null;
+
+        if (empty($class)) {
+            Notification::make()
+                ->title('No job selected')
+                ->body('Please select a job before saving.')
+                ->danger()
+                ->send();
+
+            $this->dispatch('taskbridge-picker-error');
+
+            throw new Halt;
+        }
 
         if (class_exists($class)) {
             $attr = JobInspector::getSchedulableJobAttribute($class);

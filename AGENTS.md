@@ -51,6 +51,18 @@ class ImportProducts implements ReportsTaskOutput, ShouldQueue
 
 **`resolveLabel()` and `resolveGroup()` are the single source of truth.** Both label and group fallback logic lives in `ScheduledJobResource::resolveLabel()` and `resolveGroup()`. Use these helpers everywhere — do not inline the detection logic. Priority order inside each helper: `#[SchedulableJob]` attribute → interface method → auto-derived default. Do not change this order.
 
+**The job picker is a Livewire modal — not a Select.** The Create form uses `Hidden::make('class')` to hold the selected class value and `Forms\Components\Livewire::make(JobPickerModal::class)` to render the interactive picker. Do not replace it with a `Select` or any other form field. The picker is registered as `taskbridge-job-picker` in the service provider.
+
+**Incompatible jobs are visible in the picker with a warning — not hidden.** `JobPickerModal` merges registered classes (compatible) with all discovered classes (including those filtered out by `hasSimpleConstructor`). Incompatible jobs are shown as non-clickable cards with a red warning listing the offending parameters. Do not filter them out of the picker — showing them with an explanation is intentional.
+
+**`CreateScheduledJob::onJobSelected()` handles job selection side-effects.** The `#[On('taskbridge-job-selected')]` handler updates `$this->data['class']`, `_identifier_hint`, `cron_override`, and `group` — the same side-effects the old `Select::afterStateUpdated` callback performed. If you need to react to job selection, do it here.
+
+**Validation on empty class uses `Halt` + `Notification` + a picker error event.** `mutateFormDataBeforeCreate` guards against an empty `class` value: it sends a danger notification, dispatches `taskbridge-picker-error` (which turns the Browse button red), then throws `Filament\Support\Exceptions\Halt`. Never let an empty class reach `JobFormBuilder::resolveArguments()`.
+
+**`JobPickerSize` enum controls modal width and item grid columns.** Values: `Medium` (48rem, 2 cols), `Large` (72rem, 3 cols), `Xl` (90rem, 4 cols). Set via `TaskBridgePlugin::make()->jobPickerSize(JobPickerSize::Large)`. Width and column count are derived from `$size->maxWidth()` and `$size->columns()` — do not hardcode these values in the blade.
+
+**The Create page has header actions.** `CreateScheduledJob::getHeaderActions()` returns Cancel, Save & create another, and Create. These mirror the bottom form actions and are shown at the top of the page.
+
 **`TaskBridgePlugin::get()` is the only way to read plugin config.** Never inject the plugin via constructor or instantiate it with `new`. During tests it falls back to defaults automatically.
 
 **Always resolve model classes via config:**
