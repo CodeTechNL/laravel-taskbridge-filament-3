@@ -277,10 +277,14 @@ class ScheduledJobResource extends Resource
                 Tables\Columns\ToggleColumn::make('enabled')
                     ->label('Enabled')
                     ->disabled(fn (ScheduledJob $record) => $record->isOnce())
-                    ->afterStateUpdated(function (ScheduledJob $record) {
-                        $record->enabled
-                            ? TaskBridge::enable($record->class)
-                            : TaskBridge::disable($record->class);
+                    ->afterStateUpdated(function (ScheduledJob $record, bool $state) {
+                        try {
+                            $state
+                                ? TaskBridge::enable($record->class)
+                                : TaskBridge::disable($record->class);
+                        } catch (\Throwable) {
+                            // Non-fatal: record is saved, sync can be re-run manually
+                        }
                     }),
 
                 Tables\Columns\TextColumn::make('last_run_at')
