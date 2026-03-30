@@ -32,8 +32,9 @@ The plugin stores all UI configuration as private properties with fluent setters
 
 Full CRUD resource for managing scheduled jobs.
 
-**Form fields:**
-- `class` — `Select` from `TaskBridge::getRegisteredClasses()`. If `preventDuplicates = true`, already-registered classes are shown but disabled (prevented by validation). Auto-populates `identifier` and `cron_expression` from the job instance on selection.
+**Form fields (Create page):**
+- `class` — `Hidden::make('class')` holds the selected FQCN. `Forms\Components\Livewire::make(JobPickerModal::class)` renders the interactive picker modal. When a job is selected, `CreateScheduledJob::onJobSelected()` (via `#[On('taskbridge-job-selected')]`) updates the hidden field and auto-populates `identifier`, `cron_override`, and `group`.
+- On the **Edit page**, `class` is shown as a disabled `TextInput` (read-only after creation).
 - `queue_connection` — `Select` built from `config('queue.connections')`, filtered to SQS-only entries
 - `cron_expression` — `TextInput` with `CronTranslator::isValid()` validation; shows human-readable description via `CronTranslator::describe()`
 - `cron_override` — nullable `TextInput` with same cron validation
@@ -56,7 +57,7 @@ Full CRUD resource for managing scheduled jobs.
 
 **Bulk actions:** Enable selected, Disable selected, Delete selected
 
-**Header actions:** `SyncAction`, `ValidateJobsAction`
+**Header actions:** An `ActionGroup` labelled "Tools" (outlined, gray, wrench icon) containing `SyncAction`, `ValidateJobsAction`, and `ImportSchedulesAction`; plus standalone `ScheduleOnceAction` and the Add Job (Create) action.
 
 **Static helpers:**
 - `resolveLabel(string $class): string` — returns `taskLabel()` if `LabeledJob`, otherwise `class_basename()`
@@ -86,7 +87,7 @@ Read-only resource for the run log. No create/edit pages.
 
 ### ListScheduledJobs
 
-Standard list page. Header actions: `SyncAction`, `ValidateJobsAction`.
+Standard list page. Header actions: a "Tools" `ActionGroup` containing `SyncAction`, `ValidateJobsAction`, and `ImportSchedulesAction`; plus standalone `ScheduleOnceAction` and the Add Job (Create) action.
 
 ### CreateScheduledJob
 
@@ -139,8 +140,12 @@ Header action. Calls `TaskBridge::sync()`. Shows a success notification with cre
 
 Header action. Iterates all registered job classes. For each:
 - Checks `class_exists()`
-- Checks `implements ScheduledJob`
+- Checks that the class can be loaded and reflected (e.g. via `ReflectionClass`)
 Collects warnings and shows them in a notification.
+
+### ImportSchedulesAction
+
+Header action (part of the Tools `ActionGroup`). Imports jobs from `config('taskbridge.schedules')` into the database. Reuses `ImportSchedulesCommand::parseEntry()` and `ImportSchedulesCommand::validateArguments()` from the core package for validation — never duplicates that logic. Shows a success notification with a count of imported entries, or a warning/danger notification if any entries failed.
 
 ---
 

@@ -107,6 +107,21 @@ Toggle::make($fieldName)
 
 **Activate/Deactivate on the view page use `$this->record = $this->record->fresh()` to refresh.** `refreshFormData()` does not exist on `ViewRecord`. After the action runs, reload the record with `->fresh()` to reflect the new enabled state in the infolist.
 
+**`ToggleColumn::afterStateUpdated` must use the injected `bool $state` parameter.** Never read `$record->enabled` inside `afterStateUpdated` — the record has not been updated yet at that point. Use the injected `bool $state` value. Additionally, wrap the AWS enable/disable call in a `try/catch(\Throwable)` so that API failures are surfaced as a Filament notification rather than reverting the toggle silently. This is consistent with `EditScheduledJob::afterSave()`:
+```php
+->afterStateUpdated(function (bool $state, ScheduledJob $record) {
+    try {
+        $state ? TaskBridge::enable($record->class) : TaskBridge::disable($record->class);
+    } catch (\Throwable $e) {
+        Notification::make()->danger()->title('AWS error')->body($e->getMessage())->send();
+    }
+})
+```
+
+**The Tools ActionGroup must stay grouped in `ListScheduledJobs::getHeaderActions()`.** `SyncAction`, `ValidateJobsAction`, and `ImportSchedulesAction` are grouped together under a single `ActionGroup` (outlined, gray, wrench icon) labelled "Tools". Schedule Once and Add Job remain as standalone header actions. Do not split the three tool actions back into standalone header actions.
+
+**`ImportSchedulesAction` must reuse core package helpers.** `ImportSchedulesAction` calls `ImportSchedulesCommand::parseEntry()` and `ImportSchedulesCommand::validateArguments()` from the core package. Never duplicate this validation logic inside the Filament package.
+
 ## Further reading
 
 - @README.md — plugin configuration and all available options

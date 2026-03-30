@@ -77,10 +77,15 @@ When a job has scalar constructor parameters, **Run now** and **Dry run** each r
 
 **Header actions:**
 
-| Action | Description |
-|--------|-------------|
-| Sync | Push all enabled jobs to AWS EventBridge Scheduler |
-| Validate | Check that all registered job classes exist and can be loaded |
+| Action | Location | Description |
+|--------|----------|-------------|
+| Sync | Tools dropdown | Push all enabled jobs to AWS EventBridge Scheduler |
+| Validate | Tools dropdown | Check that all registered job classes exist and can be loaded |
+| Import | Tools dropdown | Import jobs from `taskbridge.schedules` config into the database |
+| Schedule Once | Standalone | Schedule a job to run once at a specific date/time |
+| Add Job | Standalone | Open the create form to register a new recurring job |
+
+Sync, Validate, and Import are grouped under a **Tools** button (outlined, gray, wrench icon). Schedule Once and Add Job remain as standalone header actions.
 
 ### Table columns
 
