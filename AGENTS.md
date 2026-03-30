@@ -49,7 +49,7 @@ class ImportProducts implements ReportsTaskOutput, ShouldQueue
 ->formatStateUsing(fn (?array $state) => $state ? JobOutput::fromArray($state)->label() : null)
 ```
 
-**`resolveLabel()` and `resolveGroup()` are the single source of truth.** Both label and group fallback logic lives in `ScheduledJobResource::resolveLabel()` and `resolveGroup()`. Use these helpers everywhere — do not inline the detection logic.
+**`resolveLabel()` and `resolveGroup()` are the single source of truth.** Both label and group fallback logic lives in `ScheduledJobResource::resolveLabel()` and `resolveGroup()`. Use these helpers everywhere — do not inline the detection logic. Priority order inside each helper: `#[SchedulableJob]` attribute → interface method → auto-derived default. Do not change this order.
 
 **`TaskBridgePlugin::get()` is the only way to read plugin config.** Never inject the plugin via constructor or instantiate it with `new`. During tests it falls back to defaults automatically.
 

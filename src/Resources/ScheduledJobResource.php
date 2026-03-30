@@ -4,6 +4,7 @@ namespace CodeTechNL\TaskBridgeFilament\Resources;
 
 use CodeTechNL\TaskBridge\Contracts\HasCustomLabel;
 use CodeTechNL\TaskBridge\Contracts\HasGroup;
+use CodeTechNL\TaskBridge\Contracts\HasPredefinedCronExpression;
 use CodeTechNL\TaskBridge\Contracts\HidesFromTaskCreation;
 use CodeTechNL\TaskBridge\Enums\RunStatus;
 use CodeTechNL\TaskBridge\Facades\TaskBridge;
@@ -97,11 +98,11 @@ class ScheduledJobResource extends Resource
 
                                 $set('_identifier_hint', ScheduledJob::identifierFromClass($state));
 
+                                $attr = JobInspector::getSchedulableJobAttribute($state);
                                 $instance = JobInspector::make($state);
 
-                                $cron = method_exists($instance, 'cronExpression')
-                                    ? $instance->cronExpression()
-                                    : null;
+                                $cron = $attr?->cron
+                                    ?? ($instance instanceof HasPredefinedCronExpression ? $instance->cronExpression() : null);
                                 if ($cron !== null) {
                                     $set('cron_override', $cron);
                                 }
@@ -174,8 +175,7 @@ class ScheduledJobResource extends Resource
                                     }
 
                                     $instance = JobInspector::make($class);
-                                    $hasCron = method_exists($instance, 'cronExpression')
-                                        && $instance->cronExpression() !== null;
+                                    $hasCron = $instance instanceof HasPredefinedCronExpression;
 
                                     if (! $hasCron) {
                                         $fail('A cron expression is required because the job class does not define one.');
@@ -527,13 +527,18 @@ class ScheduledJobResource extends Resource
     /**
      * Resolve a human-readable label for a class name.
      *
-     * Priority: LabeledJob::taskLabel() → readable sentence-case from class basename.
+     * Priority: #[SchedulableJob(name:)] → HasCustomLabel::taskLabel() → sentence-case basename.
      * E.g. MyClassIsThis → "My class is this"
      */
     public static function resolveLabel(string $class): string
     {
         if (! class_exists($class)) {
             return class_basename($class).' ⚠';
+        }
+
+        $attr = JobInspector::getSchedulableJobAttribute($class);
+        if ($attr?->name !== null) {
+            return $attr->name;
         }
 
         $instance = JobInspector::make($class);
@@ -548,7 +553,7 @@ class ScheduledJobResource extends Resource
     /**
      * Resolve a group for a class name.
      *
-     * Priority: GroupedJob::group() → namespace segment before the class name.
+     * Priority: #[SchedulableJob(group:)] → HasGroup::group() → namespace segment before the class name.
      * Returns null when the class lives directly under a root segment (Jobs, etc.).
      *
      * E.g. App\Jobs\Reporting\SendReport → "Reporting"
@@ -558,6 +563,11 @@ class ScheduledJobResource extends Resource
     {
         if (! class_exists($class)) {
             return null;
+        }
+
+        $attr = JobInspector::getSchedulableJobAttribute($class);
+        if ($attr?->group !== null) {
+            return $attr->group;
         }
 
         $instance = JobInspector::make($class);

@@ -148,12 +148,16 @@ TaskBridgePlugin::make()
 
 ### All available options
 
+> **Navigation nesting:** Filament v3 supports flat navigation only (Group → Items). There is no support for nested groups (e.g. System → Task Bridge → Items). Use a single group name.
+
 | Method | Default | Description |
 |--------|---------|-------------|
-| `navigationGroup(string)` | `'System'` | Sidebar group label |
+| `navigationGroup(string)` | `'Task Bridge'` | Sidebar group label for Scheduled Jobs and Run Logs |
+| `dashboardNavigationGroup(string)` | `'Task Bridge'` | Sidebar group label for the Dashboard |
 | `navigationLabel(string)` | `'Scheduled Jobs'` | Sidebar item label |
 | `navigationIcon(string)` | `heroicon-o-clock` | Sidebar icon |
-| `navigationSort(int)` | `99` | Sidebar sort order |
+| `navigationSort(int)` | `2` | Sidebar sort order (Dashboard defaults to 1, Run Logs is always +1) |
+| `dashboardNavigationSort(int)` | `1` | Sort order for the Dashboard item |
 | `slug(string)` | `scheduled-jobs` | URL path for the resource |
 | `heading(string)` | `'Scheduled Jobs'` | H1 on the list page |
 | `subheading(string)` | `null` | Subtitle below H1 |
@@ -187,10 +191,10 @@ The policy is applied to `ScheduledJobResource`. Standard Filament policy method
 When you select a job class in the Create form, TaskBridge automatically pre-fills:
 
 - **Identifier** — derived from the class name + name prefix
-- **Cron expression** — from `cronExpression()` if the method exists on the class
-- **Group** — from `HasGroup::group()` if implemented, otherwise from the folder name
+- **Cron expression** — from `#[SchedulableJob(cron:)]` if set, otherwise from `HasPredefinedCronExpression::cronExpression()` if implemented
+- **Group** — from `#[SchedulableJob(group:)]` if set, otherwise from `HasGroup::group()` if implemented, otherwise from the folder name
 
-All of these can be edited before saving. The cron field is required only when the job class does not define a default.
+All of these can be edited before saving. The cron field is required only when the job class does not define a default via the attribute or the interface.
 
 ### Constructor arguments in the create/edit form
 
@@ -221,12 +225,25 @@ Jobs whose constructors require non-scalar types (Eloquent models, service objec
 
 ## Labels and groups
 
-Without any interface, TaskBridge derives readable values automatically:
+Without any configuration, TaskBridge derives readable values automatically:
 
 - **Label**: `SendDailyReport` → `"Send daily report"`
 - **Group**: `App\Jobs\Reporting\SendDailyReport` → `"Reporting"` (from folder)
 
-Override either by implementing the corresponding interface:
+### Override via attribute
+
+The `#[SchedulableJob]` attribute is the most concise way to set label, group, and cron together:
+
+```php
+use CodeTechNL\TaskBridge\Attributes\SchedulableJob;
+
+#[SchedulableJob(name: 'Daily Report — Finance', group: 'Finance', cron: '0 8 * * 1-5')]
+class SendDailyReport implements ShouldQueue { ... }
+```
+
+### Override via interfaces
+
+The interfaces still work and are the right choice when the label or group needs runtime logic:
 
 ```php
 use CodeTechNL\TaskBridge\Contracts\HasCustomLabel;
@@ -245,6 +262,8 @@ class SendDailyReport implements HasCustomLabel, HasGroup, ShouldQueue
     }
 }
 ```
+
+**Priority order:** `#[SchedulableJob]` attribute → interface method → auto-derived default. When both the attribute and an interface are present, the attribute wins.
 
 ## Viewing structured job output
 
