@@ -302,3 +302,7 @@ duration   | 2.1s
 ## Run Logs in the job view
 
 Opening a job's detail page (View) shows the run history inline via the **Run History** relation manager. Same columns and actions as the standalone Run Logs page.
+
+---
+
+*This package was fully built with [Claude Code](https://claude.ai/claude-code).*
